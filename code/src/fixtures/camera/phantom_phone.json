@@ -1,0 +1,40 @@
+{
+  "id": "CAM-PHANTOM-001",
+  "version": "1.0",
+  "compilerVersion": "1.0.0",
+  "createdAt": "2026-06-27T10:00:00.000Z",
+  "fingerprint": "mock_fingerprint_cam",
+  "storyboardId": "STB-PHANTOM-001",
+  "sceneId": "SCN-0001",
+  "aspectRatio": "16_9",
+  "cameraFingerprint": {
+    "pushPercent": 60,
+    "panPercent": 0,
+    "staticPercent": 40,
+    "pullPercent": 0
+  },
+  "cameraProgram": [
+    {
+      "programId": "CAM-0001",
+      "startMs": 0,
+      "durationMs": 1000,
+      "action": "LOCK",
+      "motivation": "Reveal",
+      "shotType": "Close",
+      "framingRule": "Centered",
+      "targetAssetId": "phone_body",
+      "intensity": "medium"
+    },
+    {
+      "programId": "CAM-0002",
+      "startMs": 1000,
+      "durationMs": 3000,
+      "action": "PUSH_SOFT",
+      "motivation": "Inspect",
+      "shotType": "Macro",
+      "framingRule": "Centered",
+      "targetAssetId": "phone_body",
+      "intensity": "medium"
+    }
+  ]
+}

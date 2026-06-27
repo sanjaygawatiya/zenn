@@ -1,0 +1,32 @@
+{
+  "id": "LAY-PHANTOM-001",
+  "version": "1.0",
+  "compilerVersion": "1.0.0",
+  "createdAt": "2026-06-27T10:00:00.000Z",
+  "fingerprint": "mock_fingerprint_lay",
+  "storyboardId": "STB-PHANTOM-001",
+  "sceneId": "SCN-0001",
+  "aspectRatio": "16_9",
+  "layoutAssets": [
+    {
+      "assetId": "phone_body",
+      "anchorX": 0.5,
+      "anchorY": 0.5,
+      "centerX": 0.5,
+      "centerY": 0.5,
+      "width": 0.3,
+      "height": 0.6,
+      "zIndex": 10
+    },
+    {
+      "assetId": "caption_label",
+      "anchorX": 0.5,
+      "anchorY": 0.5,
+      "centerX": 0.5,
+      "centerY": 0.85,
+      "width": 0.8,
+      "height": 0.1,
+      "zIndex": 20
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "id": "STB-PHANTOM-001",
+  "version": "1.0",
+  "compilerVersion": "1.0.0",
+  "createdAt": "2026-06-27T10:00:00.000Z",
+  "fingerprint": "mock_fingerprint_stb",
+  "scenes": [
+    {
+      "sceneId": "SCN-0001",
+      "objective": "Explain phantom phone vibration phenomenon",
+      "rawScript": "Have you ever felt your phone vibrate, only to find no messages?",
+      "timingOffsetMs": 0,
+      "durationMs": 5000,
+      "assets": [
+        {
+          "assetId": "phone_body",
+          "type": "SVG",
+          "role": "primary_subject",
+          "style": "flat_vector",
+          "mustRemainVisible": true
+        },
+        {
+          "assetId": "caption_label",
+          "type": "TXT",
+          "role": "label",
+          "style": "serif_body",
+          "mustRemainVisible": false
+        }
+      ]
+    }
+  ]
+}
