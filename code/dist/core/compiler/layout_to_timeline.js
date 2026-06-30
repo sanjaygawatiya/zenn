@@ -9,20 +9,19 @@ export class LayoutToTimelineCompiler {
         context.metrics.increment('CP-002-Runs');
         const storyboard = input.storyboard;
         const layout = input.layout;
-        const scene = storyboard.scenes.find(s => s.sceneId === layout.sceneId);
-        if (!scene) {
-            context.diagnostics.add('CP-002-P01', 'ERROR', `Storyboard scene not found for Layout scene ID ${layout.sceneId}`);
+        if (storyboard.scenes.length === 0) {
+            context.diagnostics.add('CP-002-P01', 'ERROR', 'Storyboard contains no scenes');
             return {
                 success: false,
-                errors: [new CompilerError(`Scene not found: ${layout.sceneId}`, 'CP-002-ERR-01', 'ERROR', 'QG-11', 'CP-002')],
+                errors: [new CompilerError('Storyboard contains no scenes', 'CP-002-ERR-01', 'ERROR', 'QG-11', 'CP-002')],
             };
         }
-        const durationMs = scene.durationMs;
+        const durationMs = storyboard.scenes.reduce((sum, s) => sum + s.durationMs, 0);
         if (durationMs <= 0 || durationMs % 1 !== 0) {
-            context.diagnostics.add('CP-002-P01', 'ERROR', 'Scene duration must be a positive integer milliseconds value');
+            context.diagnostics.add('CP-002-P01', 'ERROR', 'Total storyboard duration must be a positive integer');
             return {
                 success: false,
-                errors: [new CompilerError('Scene duration invalid', 'CP-002-ERR-02', 'ERROR', 'QG-11', 'CP-002')],
+                errors: [new CompilerError('Storyboard duration invalid', 'CP-002-ERR-02', 'ERROR', 'QG-11', 'CP-002')],
             };
         }
         const builder = new TimelineBuilder()
@@ -30,28 +29,53 @@ export class LayoutToTimelineCompiler {
             .storyboardId(storyboard.id)
             .sceneId(layout.sceneId)
             .masterClockMs(durationMs);
-        const layoutAssets = [...layout.layoutAssets].sort((a, b) => a.assetId.localeCompare(b.assetId));
         const visualEvents = [];
-        for (const asset of layoutAssets) {
-            const enterEvent = {
-                eventId: `EVT-VIS-ENTER-${asset.assetId}`,
-                startMs: 0,
-                durationMs: 500,
-                payload: { assetId: asset.assetId, action: 'ENTER' },
-            };
-            builder.addEvent('visual', enterEvent);
-            visualEvents.push(enterEvent);
-            context.metrics.increment('CP-002-VisualEventsScheduled');
+        const scheduledAssets = new Set();
+        let sceneOffset = 0;
+        for (const sc of storyboard.scenes) {
+            for (const asset of sc.assets) {
+                if (!scheduledAssets.has(asset.assetId)) {
+                    scheduledAssets.add(asset.assetId);
+                    const enterEvent = {
+                        eventId: `EVT-VIS-ENTER-${asset.assetId}`,
+                        startMs: sceneOffset,
+                        durationMs: 500,
+                        payload: { assetId: asset.assetId, action: 'ENTER' },
+                    };
+                    builder.addEvent('visual', enterEvent);
+                    visualEvents.push(enterEvent);
+                    context.metrics.increment('CP-002-VisualEventsScheduled');
+                }
+            }
+            sceneOffset += sc.durationMs;
         }
-        const captionEvent = {
-            eventId: `EVT-CAP-001`,
-            startMs: 0,
-            durationMs: Math.min(4000, durationMs),
-            payload: { text: scene.rawScript },
-        };
-        builder.addEvent('captions', captionEvent);
-        context.metrics.increment('CP-002-CaptionEventsScheduled');
-        const allEvents = [...visualEvents, captionEvent];
+        const captionEvents = [];
+        const narrationEvents = [];
+        let captionOffset = 0;
+        let captionCounter = 1;
+        for (const sc of storyboard.scenes) {
+            const pad = String(captionCounter++).padStart(3, '0');
+            const captionEvent = {
+                eventId: `EVT-CAP-${pad}`,
+                startMs: captionOffset,
+                durationMs: sc.durationMs,
+                payload: { text: sc.rawScript },
+            };
+            builder.addEvent('captions', captionEvent);
+            captionEvents.push(captionEvent);
+            context.metrics.increment('CP-002-CaptionEventsScheduled');
+            const narrationEvent = {
+                eventId: `EVT-VO-${pad}`,
+                startMs: captionOffset,
+                durationMs: sc.durationMs,
+                payload: { text: sc.rawScript },
+            };
+            builder.addEvent('narration', narrationEvent);
+            narrationEvents.push(narrationEvent);
+            context.metrics.increment('CP-002-NarrationEventsScheduled');
+            captionOffset += sc.durationMs;
+        }
+        const allEvents = [...visualEvents, ...captionEvents, ...narrationEvents];
         for (const event of allEvents) {
             if (event.startMs % 1 !== 0 || event.durationMs % 1 !== 0) {
                 context.diagnostics.add('CP-002-P04', 'ERROR', `Event ${event.eventId} contains floating-point values`);
@@ -61,7 +85,7 @@ export class LayoutToTimelineCompiler {
                 };
             }
             if (event.startMs + event.durationMs > durationMs) {
-                context.diagnostics.add('CP-002-P04', 'ERROR', `Event ${event.eventId} exceeds scene duration limits`);
+                context.diagnostics.add('CP-002-P04', 'ERROR', `Event ${event.eventId} exceeds timeline duration limits`);
                 return {
                     success: false,
                     errors: [new CompilerError('Event duration overrun', 'CP-002-ERR-04', 'ERROR', 'QG-11', 'CP-002')],

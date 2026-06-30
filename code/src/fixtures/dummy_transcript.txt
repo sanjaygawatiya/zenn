@@ -1,0 +1,2 @@
+This is a test of the Zenn Educational Animation Engine.
+We can now generate narration from text and render custom scenes dynamically.

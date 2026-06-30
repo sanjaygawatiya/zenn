@@ -1,0 +1,40 @@
+{
+  "id": "AUD-STB-PHANTOM-001",
+  "version": "1.0",
+  "compilerVersion": "1.0.0",
+  "createdAt": "2026-06-27T10:00:00.000Z",
+  "fingerprint": "mock_fingerprint_aud",
+  "audioId": "AUD-STB-PHANTOM-001",
+  "storyboardId": "STB-PHANTOM-001",
+  "totalDurationMs": 5000,
+  "masterLoudnessLufs": -14,
+  "audioFingerprint": {
+    "averageLufs": -14,
+    "pauseDensity": 0,
+    "sfxRatio": 0,
+    "narrationRatio": 1,
+    "ambientRatio": 0,
+    "musicRatio": 0
+  },
+  "tracks": {
+    "narration": [
+      {
+        "eventId": "EVT-VO-001",
+        "resolvedFileUri": "audio/narration_001.wav",
+        "startMs": 0,
+        "durationMs": 4000,
+        "loop": false,
+        "motivation": "reveal",
+        "gainEnvelope": [
+          {
+            "offsetMs": 0,
+            "volumeDb": 0
+          }
+        ]
+      }
+    ],
+    "sfx": [],
+    "ambient": [],
+    "music": []
+  }
+}

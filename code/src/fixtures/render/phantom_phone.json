@@ -1,0 +1,47 @@
+{
+  "id": "RND-STB-PHANTOM-001",
+  "version": "1.0",
+  "compilerVersion": "1.0.0",
+  "createdAt": "2026-06-27T10:00:00.000Z",
+  "fingerprint": "mock_fingerprint_rnd",
+  "renderId": "RND-STB-PHANTOM-001",
+  "resolution": {
+    "width": 1920,
+    "height": 1080
+  },
+  "fps": 30,
+  "totalFrames": 150,
+  "assets": [
+    {
+      "assetId": "phone_body",
+      "resolvedUri": "assets/phone_body.svg",
+      "layer": "midground",
+      "zIndex": 10,
+      "keyframes": [
+        {
+          "frame": 0,
+          "transform": {
+            "x": 960,
+            "y": 540,
+            "scaleX": 1,
+            "scaleY": 1,
+            "rotation": 0,
+            "opacity": 1
+          },
+          "bezier": [0.25, 1, 0.5, 1]
+        }
+      ]
+    }
+  ],
+  "camera": {
+    "keyframes": [
+      {
+        "frame": 0,
+        "x": 960,
+        "y": 540,
+        "zoom": 1,
+        "bezier": [0.25, 1, 0.5, 1]
+      }
+    ]
+  }
+}

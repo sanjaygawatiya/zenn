@@ -38,6 +38,13 @@ export class MotionBuilder {
         return this;
     }
     build() {
+        const assetCounts = {};
+        for (const item of this._motionProgram) {
+            assetCounts[item.targetAssetId] = (assetCounts[item.targetAssetId] ?? 0) + 1;
+            if ((assetCounts[item.targetAssetId] ?? 0) > 3) {
+                throw new Error(`Motion budget exceeded for asset ${item.targetAssetId}`);
+            }
+        }
         const rawContent = {
             storyboardId: this._storyboardId,
             sceneId: this._sceneId,

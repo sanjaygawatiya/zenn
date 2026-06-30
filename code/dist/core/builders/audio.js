@@ -49,7 +49,7 @@ export class AudioBuilder {
             storyboardId: this._storyboardId,
             totalDurationMs: this._totalDurationMs,
             masterLoudnessLufs: this._masterLoudnessLufs,
-            fingerprint: this._fingerprint,
+            audioFingerprint: this._fingerprint,
             tracks: this._tracks,
         };
         const fingerprint = computeFingerprint(rawContent);

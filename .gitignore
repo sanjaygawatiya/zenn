@@ -24,3 +24,12 @@ code/.env
 # Large raw reference video assets
 reference/**/*.mp4
 reference/templates/*.mp4
+
+# Test workspace outputs
+code/workspace_test/
+workspace_test/
+workspace_out/
+code/workspace_out/
+
+# Reference assets
+reference/viral_short/

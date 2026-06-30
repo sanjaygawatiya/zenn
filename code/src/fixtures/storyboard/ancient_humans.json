@@ -1,0 +1,101 @@
+{
+  "id": "STB-HUMANS-001",
+  "version": "1.0",
+  "compilerVersion": "1.0.0",
+  "createdAt": "2026-06-29T10:00:00.000Z",
+  "fingerprint": "mock_fingerprint_stb_humans",
+  "scenes": [
+    {
+      "sceneId": "SCN-0001",
+      "objective": "Introduce light switch contrast",
+      "rawScript": "Tonight, when the sun goes down, you're going to flip a switch.",
+      "timingOffsetMs": 0,
+      "durationMs": 6000,
+      "assets": [
+        {
+          "assetId": "room_light",
+          "type": "SVG",
+          "role": "primary_subject",
+          "style": "flat_vector",
+          "mustRemainVisible": true
+        },
+        {
+          "assetId": "stick_figure",
+          "type": "SVG",
+          "role": "primary_subject",
+          "style": "flat_vector",
+          "mustRemainVisible": true
+        }
+      ]
+    },
+    {
+      "sceneId": "SCN-0002",
+      "objective": "Highlight historical darkness",
+      "rawScript": "But for 99.9% of human history, that switch didn't exist.",
+      "timingOffsetMs": 6000,
+      "durationMs": 6000,
+      "assets": [
+        {
+          "assetId": "dark_room",
+          "type": "SVG",
+          "role": "background",
+          "style": "flat_vector",
+          "mustRemainVisible": true
+        },
+        {
+          "assetId": "stick_figure",
+          "type": "SVG",
+          "role": "primary_subject",
+          "style": "flat_vector",
+          "mustRemainVisible": true
+        }
+      ]
+    },
+    {
+      "sceneId": "SCN-0003",
+      "objective": "Contrast with modern screen lights",
+      "rawScript": "But modern humans almost never experience this.",
+      "timingOffsetMs": 12000,
+      "durationMs": 8000,
+      "assets": [
+        {
+          "assetId": "glowing_phone",
+          "type": "SVG",
+          "role": "primary_subject",
+          "style": "flat_vector",
+          "mustRemainVisible": true
+        },
+        {
+          "assetId": "stick_figure",
+          "type": "SVG",
+          "role": "primary_subject",
+          "style": "flat_vector",
+          "mustRemainVisible": true
+        }
+      ]
+    },
+    {
+      "sceneId": "SCN-0004",
+      "objective": "Introduce campfire sky ancestors",
+      "rawScript": "just the black sky, the stars, and whatever fire they could keep alive.",
+      "timingOffsetMs": 20000,
+      "durationMs": 10000,
+      "assets": [
+        {
+          "assetId": "night_sky",
+          "type": "SVG",
+          "role": "background",
+          "style": "flat_vector",
+          "mustRemainVisible": true
+        },
+        {
+          "assetId": "campfire",
+          "type": "SVG",
+          "role": "primary_subject",
+          "style": "flat_vector",
+          "mustRemainVisible": true
+        }
+      ]
+    }
+  ]
+}

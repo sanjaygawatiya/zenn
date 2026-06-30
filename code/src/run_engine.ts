@@ -37,7 +37,7 @@ function findFfmpegPath(): string {
 async function main() {
   const refVideo = process.argv[2];
   const transcriptPath = process.argv[3];
-  const outDir = process.argv[4] || './workspace_out';
+  const outDir = join(process.cwd(), process.argv[4] || './workspace_out');
 
   if (!refVideo || !transcriptPath) {
     console.error('Usage: node run_engine.js <reference_video> <transcript_path> [output_directory]');
@@ -57,13 +57,25 @@ async function main() {
   const ffprobePath = findFfprobePath();
   const ffmpegPath = findFfmpegPath();
 
-  // 1. Analyze the Reference Video
+  // 1. Analyze the Reference Video (Metadata, Segmentation, Pacing & Keyframe Extraction)
   console.log('Analyzing reference video metadata...');
   const analysisCmd = `"${ffprobePath}" -v quiet -print_format json -show_format -show_streams "${refVideo}"`;
   const analysisOutput = execSync(analysisCmd).toString();
   const analysisPath = join(outDir, 'reference_analysis.json');
   writeFileSync(analysisPath, analysisOutput, 'utf8');
   console.log(`Video analysis metadata written to: ${analysisPath}`);
+
+  console.log('Running deep scene segmentation & reference keyframe extraction...');
+  const segmentationPath = join(outDir, 'reference_segmentation.json');
+  const segmentCmd = `python src/core/utils/analyze_reference.py "${refVideo}" "${outDir}"`;
+  execSync(segmentCmd, { stdio: 'inherit' });
+
+  // Read reference scene durations for pacing alignment
+  let refDurations: number[] = [];
+  if (existsSync(segmentationPath)) {
+    const segData = JSON.parse(readFileSync(segmentationPath, 'utf8'));
+    refDurations = segData.sceneDurations || [];
+  }
 
   // 2. Parse Transcript into script lines
   console.log('Parsing transcript lines...');
@@ -107,7 +119,12 @@ async function main() {
     const durationSec = parseFloat(execSync(durationCmd).toString().trim());
     const durationMs = Math.round(durationSec * 1000);
 
-    console.log(`- Narration Audio Duration: ${durationMs} ms`);
+    // Derive pacing from reference video cuts
+    const refDurationVal = refDurations[i];
+    const refSceneDurMs = refDurationVal !== undefined ? Math.round(refDurationVal * 1000) : 0;
+    const finalSceneDurMs = Math.max(refSceneDurMs, durationMs);
+
+    console.log(`- Scene Duration resolved: ${finalSceneDurMs} ms (ref: ${refSceneDurMs} ms, audio: ${durationMs} ms)`);
 
     scenes.push({
       sceneId: `SCN-000${i + 1}`,
@@ -130,10 +147,10 @@ async function main() {
         }
       ],
       timingOffsetMs: cumulativeTimeMs,
-      durationMs,
+      durationMs: finalSceneDurMs,
     });
 
-    cumulativeTimeMs += durationMs;
+    cumulativeTimeMs += finalSceneDurMs;
   }
 
   // 4. Build and validate Storyboard IR
@@ -201,6 +218,26 @@ async function main() {
     if (!renderResult.success) {
       console.error('Rendering failed:', renderResult.errors);
       process.exit(1);
+    }
+
+    // 8. Run visual similarity scoring
+    console.log('Running visual similarity scoring...');
+    const similarityReportPath = join(outDir, 'similarity_report.json');
+    const similarityCmd = `python src/core/utils/similarity_validator.py "${outDir}" "${outputVideoPath}" "${segmentationPath}" "${similarityReportPath}"`;
+    execSync(similarityCmd, { stdio: 'inherit' });
+    console.log(`Similarity report written to: ${similarityReportPath}`);
+
+    // Enforce similarity threshold gate
+    if (existsSync(similarityReportPath)) {
+      const report = JSON.parse(readFileSync(similarityReportPath, 'utf8'));
+      const avgSimilarity = report.averageSimilarityPercent || 0;
+      const threshold = parseFloat(process.env['SIMILARITY_THRESHOLD'] || '15.0');
+      console.log(`Similarity Validation: average=${avgSimilarity}%, threshold=${threshold}%`);
+      if (avgSimilarity < threshold) {
+        console.error(`ERROR: Visual similarity score ${avgSimilarity}% is below the required threshold of ${threshold}%!`);
+        process.exit(1);
+      }
+      console.log('Visual similarity validation check PASSED!');
     }
 
     console.log('--- REUSABLE VIDEO GENERATION ENGINE RUN COMPLETED SUCCESSFULLY ---');

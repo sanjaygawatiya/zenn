@@ -1,5 +1,5 @@
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { execSync, spawn } from 'node:child_process';
 import { RenderIR } from '../ir/render.js';
 import { AudioIR } from '../ir/audio.js';
@@ -217,8 +217,9 @@ export class MotionCanvasAdapter {
   ): Promise<Result<AdapterResult, string[]>> {
     const startTime = Date.now();
 
-    if (!existsSync(tempDir)) {
-      mkdirSync(tempDir, { recursive: true });
+    const resolvedTempDir = resolve(tempDir);
+    if (!existsSync(resolvedTempDir)) {
+      mkdirSync(resolvedTempDir, { recursive: true });
     }
 
     const width = renderIr.resolution.width;
@@ -231,7 +232,7 @@ export class MotionCanvasAdapter {
 
     // 1. Extract real template audio from the template video if it exists
     const templateVideo = 'd:/my_stuff/zenn/reference/templates/What Did Ancient Humans Do at Night _1080p.mp4';
-    const realAudioPath = join(tempDir, 'real_template_audio.aac');
+    const realAudioPath = join(resolvedTempDir, 'real_template_audio.aac');
     let hasRealAudio = false;
 
     if (existsSync(templateVideo) && isHumans) {
@@ -260,7 +261,7 @@ export class MotionCanvasAdapter {
       ffmpegArgs.push('-i', realAudioPath, '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'copy');
     } else {
       // Create silent audio fallback
-      const silentAudioPath = join(tempDir, 'silent_narration.wav');
+      const silentAudioPath = join(resolvedTempDir, 'silent_narration.wav');
       const sampleRate = 44100;
       const numSamples = Math.round((renderIr.totalFrames / renderIr.fps) * sampleRate);
       const dataSize = numSamples * 2;
@@ -944,7 +945,7 @@ export class MotionCanvasAdapter {
         supportsTransparency: true,
       },
     };
-    writeFileSync(join(tempDir, 'adapter_capability.json'), JSON.stringify(capability, null, 2));
+    writeFileSync(join(resolvedTempDir, 'adapter_capability.json'), JSON.stringify(capability, null, 2));
 
     const renderDuration = Date.now() - startTime;
     const diagnostics = {
@@ -960,7 +961,7 @@ export class MotionCanvasAdapter {
         audioFingerprint: audioIr.fingerprint,
       },
     };
-    writeFileSync(join(tempDir, 'adapter_diagnostics.json'), JSON.stringify(diagnostics, null, 2));
+    writeFileSync(join(resolvedTempDir, 'adapter_diagnostics.json'), JSON.stringify(diagnostics, null, 2));
 
     return {
       success: true,

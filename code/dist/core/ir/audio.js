@@ -32,7 +32,7 @@ export const AudioIRSchema = IRMetadataSchema.extend({
     storyboardId: z.string(),
     totalDurationMs: z.number().int().nonnegative(),
     masterLoudnessLufs: z.number(),
-    fingerprint: AudioFingerprintSchema,
+    audioFingerprint: AudioFingerprintSchema,
     tracks: AudioTracksSchema,
 }).readonly();
 export function validateAudioIR(json) {

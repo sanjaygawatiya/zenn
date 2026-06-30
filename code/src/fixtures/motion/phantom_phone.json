@@ -1,0 +1,43 @@
+{
+  "id": "MOT-PHANTOM-001",
+  "version": "1.0",
+  "compilerVersion": "1.0.0",
+  "createdAt": "2026-06-27T10:00:00.000Z",
+  "fingerprint": "mock_fingerprint_mot",
+  "storyboardId": "STB-PHANTOM-001",
+  "sceneId": "SCN-0001",
+  "aspectRatio": "16_9",
+  "motionFingerprint": {
+    "enterPercent": 20,
+    "highlightPercent": 80,
+    "morphPercent": 0,
+    "idlePercent": 0,
+    "exitPercent": 0
+  },
+  "motionProgram": [
+    {
+      "programId": "MOT-0001",
+      "targetAssetId": "phone_body",
+      "category": "Structural",
+      "priority": "Critical",
+      "intentToken": "ENTER",
+      "direction": "none",
+      "speed": "MEDIUM",
+      "startMs": 0,
+      "durationMs": 500,
+      "motivation": "reveal"
+    },
+    {
+      "programId": "MOT-0002",
+      "targetAssetId": "phone_body",
+      "category": "Attention",
+      "priority": "Normal",
+      "intentToken": "EMPHASIZE",
+      "direction": "none",
+      "speed": "MEDIUM",
+      "startMs": 1000,
+      "durationMs": 3000,
+      "motivation": "emphasize"
+    }
+  ]
+}

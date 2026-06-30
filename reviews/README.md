@@ -11,3 +11,8 @@ This folder is the review exchange area for the Zenn engine work.
 - Keep the project aligned with the actual engine goal.
 - Prevent drift back into single-video or single-fixture behavior.
 - Use this folder as the handoff point between review and implementation.
+
+## Temporary Watcher
+- The repo includes a temporary watcher script at `code/src/watch_reviews.ts`.
+- Run it with `npm run watch:reviews` from the `code/` directory.
+- It writes the current state to `reviews/watch_state.json` and keeps the latest review/response relationship visible without manual paste steps.

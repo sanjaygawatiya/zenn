@@ -24,20 +24,34 @@ export class StoryboardToLayoutCompiler implements CompilerPass<StoryboardIR, La
     const startTime = Date.now();
     context.metrics.increment('CP-001-Runs');
 
-    const scene = storyboard.scenes[0];
-    if (!scene) {
+    if (storyboard.scenes.length === 0) {
       context.diagnostics.add('CP-001-P01', 'ERROR', 'Storyboard contains no scenes');
       return { success: false, errors: ['Storyboard contains no scenes'] };
     }
 
-    const hasPrimary = scene.assets.some(a => a.role === 'primary_subject');
+    let hasPrimary = false;
+    for (const sc of storyboard.scenes) {
+      if (sc.assets.some(a => a.role === 'primary_subject')) {
+        hasPrimary = true;
+        break;
+      }
+    }
     if (!hasPrimary) {
       context.diagnostics.add('CP-001-P01', 'ERROR', 'Missing primary_subject asset');
       return { success: false, errors: ['Missing primary_subject asset'] };
     }
 
+    const uniqueAssetsMap = new Map<string, typeof storyboard.scenes[0]['assets'][0]>();
+    for (const sc of storyboard.scenes) {
+      for (const asset of sc.assets) {
+        if (!uniqueAssetsMap.has(asset.assetId)) {
+          uniqueAssetsMap.set(asset.assetId, asset);
+        }
+      }
+    }
+
     const layoutAssets: LayoutAsset[] = [];
-    for (const asset of scene.assets) {
+    for (const asset of uniqueAssetsMap.values()) {
       let centerX = 0.5;
       let centerY = 0.5;
       let width = 0.3;
@@ -98,7 +112,7 @@ export class StoryboardToLayoutCompiler implements CompilerPass<StoryboardIR, La
       const builder = new LayoutBuilder()
         .id(`LAY-${storyboard.id}`)
         .storyboardId(storyboard.id)
-        .sceneId(scene.sceneId)
+        .sceneId(storyboard.scenes[0]?.sceneId ?? 'SCN-0001')
         .aspectRatio(context.config.aspectRatio);
 
       for (const asset of layoutAssets) {
