@@ -1,0 +1,26 @@
+# Node dependency directories
+node_modules/
+code/node_modules/
+
+# TypeScript compiled outputs
+code/dist/
+dist/
+
+# Rendered output video files
+*.mp4
+code/*.mp4
+code/output.mp4
+code/output_humans.mp4
+
+# Temporary compiler pipeline artifact directories
+code/tmp/
+code/tmp_mutated/
+tmp/
+
+# Secret and configuration files
+.env
+code/.env
+
+# Large raw reference video assets
+reference/**/*.mp4
+reference/templates/*.mp4
