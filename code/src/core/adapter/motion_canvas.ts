@@ -212,7 +212,8 @@ export class MotionCanvasAdapter {
     renderIr: RenderIR,
     audioIr: AudioIR,
     outputPath: string,
-    tempDir: string = './tmp'
+    tempDir: string = './tmp',
+    timelineIr?: any
   ): Promise<Result<AdapterResult, string[]>> {
     const startTime = Date.now();
 
@@ -729,24 +730,34 @@ export class MotionCanvasAdapter {
         canvas.drawRect(960 - 748, 940 - 48, 1496, 96, 20, 20, 25);
 
         const sec = f / renderIr.fps;
+        const currentMs = (f / renderIr.fps) * 1000;
         let activeText = "TONIGHT, WHEN THE SUN GOES DOWN, YOU'RE GOING TO FLIP A SWITCH.";
         
-        if (sec < 6.0) {
-          activeText = "TONIGHT, WHEN THE SUN GOES DOWN, YOU'RE GOING TO FLIP A SWITCH.";
-        } else if (sec < 12.0) {
-          activeText = "BUT FOR 99.9% OF HUMAN HISTORY, THAT SWITCH DIDN'T EXIST.";
-        } else if (sec < 20.0) {
-          activeText = "BUT MODERN HUMANS ALMOST NEVER EXPERIENCE THIS.";
-        } else if (sec < 120.0) {
-          activeText = "JUST THE BLACK SKY, THE STARS, AND WHATEVER FIRE THEY COULD KEEP ALIVE.";
-        } else if (sec < 180.0) {
-          activeText = "THE EARLIEST EVIDENCE OF FIRE COMES FROM WONDERWERK CAVE IN SOUTH AFRICA.";
-        } else if (sec < 330.0) {
-          activeText = "BEFORE THE INDUSTRIAL AGE, PEOPLE SLEPT IN TWO DISTINCT PHASES.";
-        } else if (sec < 390.0) {
-          activeText = "CHEAPER CANDLES AND GAS LAMPS FLOODED THE MEDIEVAL CITIES WITH LIGHT.";
+        if (timelineIr) {
+          const activeCaptionEvent = timelineIr.tracks.captions.find(
+            (e: any) => currentMs >= e.startMs && currentMs < e.startMs + e.durationMs
+          );
+          if (activeCaptionEvent && activeCaptionEvent.payload) {
+            activeText = (activeCaptionEvent.payload.text || "").toUpperCase();
+          }
         } else {
-          activeText = "WE TRADED THE rhythm OF CIRCADIAN DARKNESS FOR A LIGHT SWITCH.";
+          if (sec < 6.0) {
+            activeText = "TONIGHT, WHEN THE SUN GOES DOWN, YOU'RE GOING TO FLIP A SWITCH.";
+          } else if (sec < 12.0) {
+            activeText = "BUT FOR 99.9% OF HUMAN HISTORY, THAT SWITCH DIDN'T EXIST.";
+          } else if (sec < 20.0) {
+            activeText = "BUT MODERN HUMANS ALMOST NEVER EXPERIENCE THIS.";
+          } else if (sec < 120.0) {
+            activeText = "JUST THE BLACK SKY, THE STARS, AND WHATEVER FIRE THEY COULD KEEP ALIVE.";
+          } else if (sec < 180.0) {
+            activeText = "THE EARLIEST EVIDENCE OF FIRE COMES FROM WONDERWERK CAVE IN SOUTH AFRICA.";
+          } else if (sec < 330.0) {
+            activeText = "BEFORE THE INDUSTRIAL AGE, PEOPLE SLEPT IN TWO DISTINCT PHASES.";
+          } else if (sec < 390.0) {
+            activeText = "CHEAPER CANDLES AND GAS LAMPS FLOODED THE MEDIEVAL CITIES WITH LIGHT.";
+          } else {
+            activeText = "WE TRADED THE rhythm OF CIRCADIAN DARKNESS FOR A LIGHT SWITCH.";
+          }
         }
 
         canvas.drawString(960 - 710, 940 - 15, activeText, 2, 255, 255, 255);
@@ -783,6 +794,20 @@ export class MotionCanvasAdapter {
             camY = kPrev.y + t * (kNext.y - kPrev.y);
             camZoom = kPrev.zoom + t * (kNext.zoom - kPrev.zoom);
           }
+        }
+
+        // Get active caption text
+        const currentMs = (f / renderIr.fps) * 1000;
+        let activeSubtitle = "";
+        if (timelineIr) {
+          const activeCaptionEvent = timelineIr.tracks.captions.find(
+            (e: any) => currentMs >= e.startMs && currentMs < e.startMs + e.durationMs
+          );
+          if (activeCaptionEvent && activeCaptionEvent.payload) {
+            activeSubtitle = (activeCaptionEvent.payload.text || "").toUpperCase();
+          }
+        } else {
+          activeSubtitle = "GENERIC VIDEO GENERATION ENGINE RUNNING";
         }
 
         for (const asset of renderIr.assets) {
@@ -828,26 +853,45 @@ export class MotionCanvasAdapter {
           const screenX = (x - camX) * camZoom + width / 2;
           const screenY = (y - camY) * camZoom + height / 2;
 
-          if (asset.assetId === 'phone_body' && opacity > 0.01) {
-            const w = 280 * scaleX * camZoom;
-            const h = 520 * scaleY * camZoom;
-            canvas.drawRect(screenX - w / 2, screenY - h / 2, w, h, 44, 45, 53);
-            canvas.drawRect(screenX - w / 2 + 10, screenY - h / 2 + 10, w - 20, h - 20, 10, 11, 16);
-            canvas.drawRect(screenX - w / 2 + 20, screenY - h / 2 + 30, w - 40, 120, 0, 100, 150);
-            canvas.drawString(screenX - w / 2 + 30, screenY - h / 2 + 50, "ZENN", 2, 255, 255, 255);
+          if (opacity > 0.01) {
+            if (asset.assetId.includes('caption') || asset.assetId.includes('label')) {
+              // Draw generic subtitle box at compiled coordinates
+              const w = 1500 * scaleX * camZoom;
+              const h = 100 * scaleY * camZoom;
+              canvas.drawRect(screenX - w / 2, screenY - h / 2, w, h, 35, 36, 45);
+              canvas.drawRect(screenX - w / 2 + 2, screenY - h / 2 + 2, w - 4, h - 4, 20, 20, 25);
+              canvas.drawString(screenX - w / 2 + 40, screenY - h / 2 + 35, activeSubtitle, 2, 255, 255, 255);
+            } else {
+              // Draw generic "Concept Node" for subject assets
+              const w = 240 * scaleX * camZoom;
+              const h = 240 * scaleY * camZoom;
+              const radius = 80 * scaleX * camZoom;
 
-            if (f >= 30 && f < 120) {
-              const waveOffset = (f % 6) * 4;
-              canvas.drawRect(screenX - w / 2 - 20 - waveOffset, screenY - 50, 4, 100, 0, 255, 255);
-              canvas.drawRect(screenX + w / 2 + 20 + waveOffset, screenY - 50, 4, 100, 0, 255, 255);
+              // Orbital path ring
+              canvas.drawCircle(screenX, screenY, radius * 1.5, 60, 60, 80);
+
+              // Pulsing/Orbiting particle
+              const orbitAngle = (f * 0.04) % (2 * Math.PI);
+              const opx = screenX + radius * 1.5 * Math.cos(orbitAngle);
+              const opy = screenY + radius * 1.5 * Math.sin(orbitAngle);
+              canvas.drawCircle(opx, opy, 14 * scaleX * camZoom, 255, 120, 0, true);
+              canvas.drawLine(screenX, screenY, opx, opy, 120, 120, 150);
+
+              // Main Node Circle
+              canvas.drawCircle(screenX, screenY, radius, 0, 168, 255);
+              canvas.drawCircle(screenX, screenY, radius - 4, 25, 25, 38, true);
+
+              // Inner Label (Asset ID)
+              const labelStr = asset.assetId.substring(0, 9).toUpperCase();
+              canvas.drawString(screenX - 55, screenY - 15, labelStr, 2, 255, 255, 255);
+
+              // Shake effect visual waves (if emphasizing)
+              const isEmphasizing = ka.some(k => k.frame === f && Math.abs(k.transform.x - (asset.keyframes.find(kf => kf.frame === 0)?.transform.x ?? screenX)) > 2);
+              if (isEmphasizing) {
+                const wave = (f % 5) * 6;
+                canvas.drawCircle(screenX, screenY, radius + 10 + wave, 0, 240, 255);
+              }
             }
-          } else if (asset.assetId === 'caption_label' && opacity > 0.01) {
-            const w = 1400 * scaleX * camZoom;
-            const h = 100 * scaleY * camZoom;
-            canvas.drawRect(screenX - w / 2, screenY - h / 2, w, h, 35, 36, 45);
-            canvas.drawRect(screenX - w / 2 + 2, screenY - h / 2 + 2, w - 4, h - 4, 25, 26, 32);
-            const subtitleText = "HAVE YOU EVER FELT YOUR PHONE VIBRATE, ONLY TO FIND NO MESSAGES?";
-            canvas.drawString(screenX - w / 2 + 40, screenY - h / 2 + 35, subtitleText, 2, 255, 255, 255);
           }
         }
       }
