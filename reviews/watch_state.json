@@ -1,9 +1,9 @@
 {
-  "updatedAt": "2026-07-01T03:04:00.000Z",
+  "updatedAt": "2026-07-01T04:16:00.000Z",
   "reviewsDir": "D:\\my_stuff\\zenn\\reviews",
   "latestResponseMatchesReview": true,
   "status": "RESPONSE_PRESENT",
-  "message": "Latest review review_v6 has a response folder. Production hardening pass completed.",
+  "message": "Latest review review_v6 has a response folder. Final video generation task completed successfully.",
   "latestReview": "review_v6",
-  "latestResponse": "review_v7_response"
+  "latestResponse": "review_final_response"
 }

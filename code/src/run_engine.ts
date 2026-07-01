@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, copyFileSync, unlinkSync, renameSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
@@ -82,7 +82,7 @@ async function main() {
   // 2. Parse Transcript into script lines
   console.log('Parsing transcript lines...');
   const rawTranscript = readFileSync(transcriptPath, 'utf8');
-  const lines = rawTranscript
+  let lines = rawTranscript
     .split(/\r?\n/)
     .map(l => l.trim())
     .filter(l => l.length > 0)
@@ -94,6 +94,12 @@ async function main() {
     console.error('Transcript contains no valid script lines.');
     process.exit(1);
   }
+
+  if (refDurations.length > 0 && lines.length > refDurations.length) {
+    console.log(`Capping transcript lines from ${lines.length} to match reference scenes count: ${refDurations.length}`);
+    lines = lines.slice(0, refDurations.length);
+  }
+
   console.log(`Parsed ${lines.length} scenes from transcript.`);
 
   // 3. Generate voice narration via EdgeTTS and measure durations
@@ -106,25 +112,27 @@ async function main() {
     const tempMp3 = join(outDir, `audio/temp_${pad}.mp3`);
     const wavPath = join(outDir, `audio/narration_${pad}.wav`);
 
-    console.log(`[Scene ${i + 1}/${lines.length}] Generating TTS narration for: "${text}"`);
+    if (existsSync(wavPath)) {
+      console.log(`[Scene ${i + 1}/${lines.length}] Using cached TTS narration for: "${text}"`);
+    } else {
+      // Call edge-tts CLI tool
+      const ttsCmd = `edge-tts --text "${text.replace(/"/g, '\\"')}" --write-media "${tempMp3}" --voice "en-US-ChristopherNeural"`;
+      execSync(ttsCmd, { stdio: 'inherit' });
 
-    // Call edge-tts CLI tool
-    const ttsCmd = `edge-tts --text "${text.replace(/"/g, '\\"')}" --write-media "${tempMp3}" --voice "en-US-ChristopherNeural"`;
-    execSync(ttsCmd, { stdio: 'inherit' });
-
-    // Convert MP3 to PCM WAV (mono, 44.1kHz) matching pipeline requirements
-    const convertCmd = `"${ffmpegPath}" -y -i "${tempMp3}" -acodec pcm_s16le -ac 1 -ar 44100 "${wavPath}"`;
-    execSync(convertCmd, { stdio: 'ignore' });
+      // Convert MP3 to PCM WAV (mono, 44.1kHz) matching pipeline requirements
+      const convertCmd = `"${ffmpegPath}" -y -i "${tempMp3}" -acodec pcm_s16le -ac 1 -ar 44100 "${wavPath}"`;
+      execSync(convertCmd, { stdio: 'ignore' });
+    }
 
     // Measure WAV duration
     const durationCmd = `"${ffprobePath}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${wavPath}"`;
     const durationSec = parseFloat(execSync(durationCmd).toString().trim());
     const durationMs = Math.round(durationSec * 1000);
 
-    // Derive pacing from reference video cuts
+    // Derive pacing from reference video cuts: lock to reference duration exactly if present
     const refDurationVal = refDurations[i];
     const refSceneDurMs = refDurationVal !== undefined ? Math.round(refDurationVal * 1000) : 0;
-    const finalSceneDurMs = Math.max(refSceneDurMs, durationMs);
+    const finalSceneDurMs = refSceneDurMs > 0 ? refSceneDurMs : Math.max(1000, durationMs);
 
     const activeRefScene = refScenes[i] || {};
     const bgColor = activeRefScene.backgroundColor || '#151520';
@@ -133,7 +141,7 @@ async function main() {
     console.log(`- Scene Duration resolved: ${finalSceneDurMs} ms (ref: ${refSceneDurMs} ms, audio: ${durationMs} ms)`);
 
     scenes.push({
-      sceneId: `SCN-000${i + 1}`,
+      sceneId: `SCN-${String(i + 1).padStart(4, '0')}`,
       objective: `Visualize conceptual message of sentence ${i + 1}`,
       rawScript: text,
       assets: [
@@ -232,6 +240,40 @@ async function main() {
       console.error('Rendering failed:', renderResult.errors);
       process.exit(1);
     }
+
+    // 8. Pad and Concatenate EdgeTTS narration segments to match scene pacing
+    console.log('Padding narration segments to match scene durations...');
+    const paddedFiles: string[] = [];
+    for (let i = 0; i < scenes.length; i++) {
+      const scene = scenes[i]!;
+      const pad = String(i + 1).padStart(3, '0');
+      const wavPath = join(outDir, `audio/narration_${pad}.wav`);
+      const paddedWavPath = join(outDir, `audio/padded_${pad}.wav`);
+      
+      const targetDurationSec = scene.durationMs / 1000.0;
+      const padCmd = `"${ffmpegPath}" -y -i "${wavPath}" -af "apad" -t ${targetDurationSec} "${paddedWavPath}"`;
+      execSync(padCmd, { stdio: 'ignore' });
+      paddedFiles.push(paddedWavPath);
+    }
+
+    const audioListPath = join(outDir, 'audio_list.txt');
+    const listContent = paddedFiles.map(p => `file '${p.replace(/\\/g, '/')}'`).join('\n');
+    writeFileSync(audioListPath, listContent, 'utf8');
+
+    const masterAudioPath = join(outDir, 'audio_master.wav');
+    console.log('Concatenating padded audio segments into a master narration track...');
+    const concatCmd = `"${ffmpegPath}" -y -f concat -safe 0 -i "${audioListPath}" -c copy "${masterAudioPath}"`;
+    execSync(concatCmd, { stdio: 'ignore' });
+
+    // 9. Mux master narration track into final video
+    const finalMixedPath = join(outDir, 'output_mixed.mp4');
+    console.log('Muxing master narration track into final video...');
+    const mixCmd = `"${ffmpegPath}" -y -i "${outputVideoPath}" -i "${masterAudioPath}" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 "${finalMixedPath}"`;
+    execSync(mixCmd, { stdio: 'ignore' });
+
+    // Overwrite the original output.mp4 with the mixed version
+    unlinkSync(outputVideoPath);
+    renameSync(finalMixedPath, outputVideoPath);
 
     // 8. Run visual similarity scoring
     console.log('Running visual similarity scoring...');

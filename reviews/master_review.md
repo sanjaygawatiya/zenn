@@ -42,3 +42,13 @@ The analysis and similarity layers are still heuristic, but they are now suffici
 ## Conclusion
 No further review iterations are required for the current goal definition.
 If the goal changes, the master review should be updated rather than starting a new review chain.
+
+## Production Hardening Pass
+PASS.
+
+The repository cleanup and hardening pass is also complete:
+- dev-only scaffolding was removed from the runtime path
+- the review watcher script was removed from package scripts
+- production docs now describe the engine entrypoint and similarity gate
+- the added integration test protects the helper scripts
+- `npm run build` and `npm test` are green

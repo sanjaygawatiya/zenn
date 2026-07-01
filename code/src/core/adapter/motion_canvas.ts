@@ -280,7 +280,7 @@ export class MotionCanvasAdapter {
     ];
 
     if (hasRealAudio) {
-      ffmpegArgs.push('-i', realAudioPath, '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'copy');
+      ffmpegArgs.push('-i', realAudioPath, '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'copy');
     } else {
       // Create silent audio fallback
       const silentAudioPath = join(resolvedTempDir, 'silent_narration.wav');
@@ -304,7 +304,7 @@ export class MotionCanvasAdapter {
       buf.writeUInt32LE(dataSize, 40);
       writeFileSync(silentAudioPath, buf);
 
-      ffmpegArgs.push('-i', silentAudioPath, '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac');
+      ffmpegArgs.push('-i', silentAudioPath, '-map', '0:v', '-map', '1:a', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac');
     }
 
     ffmpegArgs.push(outputPath);
@@ -321,6 +321,21 @@ export class MotionCanvasAdapter {
     const pixelDataSize = width * height * 3;
     const frameBuffer = Buffer.alloc(pixelDataSize);
     const canvas = new RawFrameCanvas(width, height, frameBuffer);
+
+    // Pre-sort camera and asset keyframes and pre-compute active frame ranges to optimize rendering speed
+    const sortedCamKeyframes = [...renderIr.camera.keyframes].sort((a, b) => a.frame - b.frame);
+    const assetSortedKeyframesMap = new Map<string, any[]>();
+    const assetActiveRangeMap = new Map<string, { start: number; end: number }>();
+    for (const asset of renderIr.assets) {
+      const sortedKfs = [...asset.keyframes].sort((a, b) => a.frame - b.frame);
+      assetSortedKeyframesMap.set(asset.assetId, sortedKfs);
+      if (sortedKfs.length > 0) {
+        assetActiveRangeMap.set(asset.assetId, {
+          start: sortedKfs[0]!.frame,
+          end: sortedKfs[sortedKfs.length - 1]!.frame
+        });
+      }
+    }
 
     for (let f = 0; f < framesCount; f++) {
       if (ffmpegExitCode !== null) {
@@ -800,7 +815,7 @@ export class MotionCanvasAdapter {
         const primaryRgb = hexToRgb(activePrimaryColor);
 
         canvas.fill(bgRgb.r, bgRgb.g, bgRgb.b);
-        const camKeyframes = [...renderIr.camera.keyframes].sort((a, b) => a.frame - b.frame);
+        const camKeyframes = sortedCamKeyframes;
         let camX = width / 2;
         let camY = height / 2;
         let camZoom = 1.0;
@@ -846,7 +861,11 @@ export class MotionCanvasAdapter {
         }
 
         for (const asset of renderIr.assets) {
-          const ka = [...asset.keyframes].sort((a, b) => a.frame - b.frame);
+          const range = assetActiveRangeMap.get(asset.assetId);
+          if (range && (f < range.start || f > range.end)) {
+            continue;
+          }
+          const ka = assetSortedKeyframesMap.get(asset.assetId)!;
           let x = width / 2;
           let y = height / 2;
           let scaleX = 1.0;

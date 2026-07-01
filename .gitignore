@@ -32,6 +32,8 @@ workspace_out/
 code/workspace_out/
 code/workspace_test_fixture/
 workspace_test_fixture/
+code/workspace_final/
+workspace_final/
 
 # Reference assets
 reference/viral_short/
