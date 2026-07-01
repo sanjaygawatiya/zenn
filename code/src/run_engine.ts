@@ -79,42 +79,60 @@ async function main() {
     refScenes = segData.scenes || [];
   }
 
-  // 2. Parse Transcript into script lines
+  // 2. Parse Transcript into script lines with timestamps
   console.log('Parsing transcript lines...');
   const rawTranscript = readFileSync(transcriptPath, 'utf8');
-  let lines = rawTranscript
-    .split(/\r?\n/)
-    .map(l => l.trim())
-    .filter(l => l.length > 0)
-    // Strip timestamps (e.g. 00:00:05 or [00:00:05]) if present
-    .map(l => l.replace(/^\[?\d{2}:\d{2}:\d{2}(\.\d{3})?\]?\s*/, '').trim())
-    .filter(l => l.length > 0);
+  const rawLines = rawTranscript.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+  const parsedLines: { ms: number; text: string }[] = [];
 
-  if (lines.length === 0) {
-    console.error('Transcript contains no valid script lines.');
+  for (const line of rawLines) {
+    const match = line.match(/^(\d{2}):(\d{2}):(\d{2})\s+(.+)$/);
+    if (match) {
+      const hrs = parseInt(match[1] || '0');
+      const mins = parseInt(match[2] || '0');
+      const secs = parseInt(match[3] || '0');
+      const ms = ((hrs * 60 + mins) * 60 + secs) * 1000;
+      const text = match[4] || '';
+      parsedLines.push({ ms, text });
+    }
+  }
+
+  if (parsedLines.length === 0) {
+    console.error('Transcript contains no valid script lines with timestamps.');
     process.exit(1);
   }
+  console.log(`Parsed ${parsedLines.length} scenes from transcript.`);
 
-  if (refDurations.length > 0 && lines.length > refDurations.length) {
-    console.log(`Capping transcript lines from ${lines.length} to match reference scenes count: ${refDurations.length}`);
-    lines = lines.slice(0, refDurations.length);
+  // 3. Get total video duration from reference video
+  let totalDurMs = 511767;
+  if (existsSync(segmentationPath)) {
+    const segData = JSON.parse(readFileSync(segmentationPath, 'utf8'));
+    if (segData.totalDurationSec) {
+      totalDurMs = Math.round(segData.totalDurationSec * 1000);
+    }
   }
 
-  console.log(`Parsed ${lines.length} scenes from transcript.`);
-
-  // 3. Generate voice narration via EdgeTTS and measure durations
+  // 4. Generate voice narration via EdgeTTS and build scenes
   const scenes = [];
-  let cumulativeTimeMs = 0;
+  for (let i = 0; i < parsedLines.length; i++) {
+    const current = parsedLines[i]!;
+    const next = parsedLines[i + 1];
+    
+    // Duration is next timestamp minus current timestamp
+    let finalSceneDurMs = next ? (next.ms - current.ms) : (totalDurMs - current.ms);
+    if (finalSceneDurMs <= 0) {
+      finalSceneDurMs = 2000; // default fallback
+    }
 
-  for (let i = 0; i < lines.length; i++) {
-    const text = lines[i] as string;
+    const text = current.text;
     const pad = String(i + 1).padStart(3, '0');
     const tempMp3 = join(outDir, `audio/temp_${pad}.mp3`);
     const wavPath = join(outDir, `audio/narration_${pad}.wav`);
 
     if (existsSync(wavPath)) {
-      console.log(`[Scene ${i + 1}/${lines.length}] Using cached TTS narration for: "${text}"`);
+      console.log(`[Scene ${i + 1}/${parsedLines.length}] Using cached TTS narration for: "${text}"`);
     } else {
+      console.log(`[Scene ${i + 1}/${parsedLines.length}] Generating TTS narration for: "${text}"`);
       // Call edge-tts CLI tool
       const ttsCmd = `edge-tts --text "${text.replace(/"/g, '\\"')}" --write-media "${tempMp3}" --voice "en-US-ChristopherNeural"`;
       execSync(ttsCmd, { stdio: 'inherit' });
@@ -124,21 +142,16 @@ async function main() {
       execSync(convertCmd, { stdio: 'ignore' });
     }
 
-    // Measure WAV duration
-    const durationCmd = `"${ffprobePath}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${wavPath}"`;
-    const durationSec = parseFloat(execSync(durationCmd).toString().trim());
-    const durationMs = Math.round(durationSec * 1000);
-
-    // Derive pacing from reference video cuts: lock to reference duration exactly if present
-    const refDurationVal = refDurations[i];
-    const refSceneDurMs = refDurationVal !== undefined ? Math.round(refDurationVal * 1000) : 0;
-    const finalSceneDurMs = refSceneDurMs > 0 ? refSceneDurMs : Math.max(1000, durationMs);
-
-    const activeRefScene = refScenes[i] || {};
-    const bgColor = activeRefScene.backgroundColor || '#151520';
-    const primaryColor = activeRefScene.primaryColor || '#00a8ff';
-
-    console.log(`- Scene Duration resolved: ${finalSceneDurMs} ms (ref: ${refSceneDurMs} ms, audio: ${durationMs} ms)`);
+    // Resolve color styles using reference segmentation at the scene's starting timestamp
+    let bgColor = '#151520';
+    let primaryColor = '#00a8ff';
+    if (refScenes.length > 0) {
+      const activeRef = [...refScenes].reverse().find(s => s.timestampSec <= current.ms / 1000.0);
+      if (activeRef) {
+        bgColor = activeRef.backgroundColor || bgColor;
+        primaryColor = activeRef.primaryColor || primaryColor;
+      }
+    }
 
     scenes.push({
       sceneId: `SCN-${String(i + 1).padStart(4, '0')}`,
@@ -167,16 +180,14 @@ async function main() {
           mustRemainVisible: true,
         }
       ],
-      timingOffsetMs: cumulativeTimeMs,
+      timingOffsetMs: current.ms,
       durationMs: finalSceneDurMs,
     });
-
-    cumulativeTimeMs += finalSceneDurMs;
   }
 
-  // 4. Build and validate Storyboard IR
+  // 5. Build and validate Storyboard IR
   const rawContent = {
-    id: 'STB-GENERIC',
+    id: 'STB-HUMANS-001',
     version: '1.0',
     compilerVersion: '1.0.0',
     createdAt: new Date().toISOString(),

@@ -257,7 +257,7 @@ export class MotionCanvasAdapter {
     const realAudioPath = join(resolvedTempDir, 'real_template_audio.aac');
     let hasRealAudio = false;
 
-    if (existsSync(templateVideo) && isHumans) {
+    if (false) { // Skip extracting real audio to prioritize EdgeTTS narration as required
       try {
         if (!existsSync(realAudioPath)) {
           const extractCmd = `"${ffmpegPath}" -y -i "${templateVideo}" -vn -acodec copy "${realAudioPath}"`;
