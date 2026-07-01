@@ -6,16 +6,16 @@ This project compiles JSON storyboards into structured rendering intermediate re
 
 ## Prerequisites
 
-To compile and render the project locally, make sure you have the following installed:
+To compile and run the project locally, make sure you have the following installed:
 1. **Node.js** (v18 or higher) & **npm**
-2. **Python** (v3.8 or higher, required for the automatic Python-based `static-ffmpeg` package used by the canvas adapter)
+2. **Python** (v3.8 or higher, required for visual similarity checks and keyframe analysis)
 3. **Git**
 
 ---
 
 ## Setup Instructions
 
-1. **Clone the repository and navigate to the code directory**:
+1. **Navigate to the code directory**:
    ```bash
    cd zenn/code
    ```
@@ -32,17 +32,26 @@ To compile and render the project locally, make sure you have the following inst
 
 ---
 
-## Running the Rendering Pipeline
+## Running the Reusable Ingestion Engine
 
-To compile the storyboard and render the visual animation into the final video (`output_humans.mp4`):
+The engine accepts a reference video and a script transcript as inputs, automatically extracts pacing and visual theme colors, generates EdgeTTS narration, renders custom dynamic scenes, and validates output similarity against a hard quality gate (default 50.0%).
 
-1. **Execute the pipeline runner script**:
+1. **Execute the ingestion engine script**:
    ```bash
-   node dist/run_humans_pipeline.js
+   node dist/run_engine.js <reference_video_path> <transcript_text_path> [output_workspace_directory]
+   ```
+   *Example*:
+   ```bash
+   node dist/run_engine.js 'D:/my_stuff/zenn/reference/templates/What Did Ancient Humans Do at Night _1080p.mp4' 'src/fixtures/dummy_transcript.txt' './workspace_test'
    ```
 
-2. The output video will be generated directly at:
-   `zenn/code/output_humans.mp4`
+2. **Customize Quality Gates**:
+   Set `SIMILARITY_THRESHOLD` environment variable to adjust the required average similarity (e.g. `20.0` to `90.0` percent):
+   ```bash
+   # On Windows Powershell
+   $env:SIMILARITY_THRESHOLD="60.0"
+   node dist/run_engine.js ...
+   ```
 
 ---
 
@@ -51,7 +60,7 @@ To compile the storyboard and render the visual animation into the final video (
 - `code/src/`: Core TypeScript source files.
   - `code/src/core/compiler/`: Parsers, compiler pipeline, and IR structures.
   - `code/src/core/adapter/`: Rendering canvas and adapters interfacing with FFmpeg.
-  - `code/src/fixtures/storyboard/`: Storyboard input data (e.g. `ancient_humans.json`).
-  - `code/src/run_humans_pipeline.ts`: Pipeline entrypoint script.
+  - `code/src/core/utils/`: Python helper scripts for scene segmentation (`analyze_reference.py`) and visual similarity checks (`similarity_validator.py`).
+  - `code/src/run_engine.ts`: Orchestration entrypoint.
 - `docs/`: Technical specifications and analyses.
 - `reference/`: Reference assets, transcripts, and template videos.
