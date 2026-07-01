@@ -32,9 +32,12 @@ def pencil_sketch(img_path, out_path):
         sketch_img = Image.new('L', (width, height))
         sketch_img.putdata(sketch_pixels)
         
-        # Add high-contrast thresholding for authentic ink/pencil hand-drawn sketch look
-        # Keeping some smooth gradients makes it look like pencil shading!
         sketch_img.save(out_path)
+        
+        # Save raw grayscale bytes
+        raw_path = out_path.replace('.png', '.raw')
+        with open(raw_path, 'wb') as f_raw:
+            f_raw.write(sketch_img.tobytes())
     except Exception as e:
         print(f"Error processing sketch for {img_path}: {e}")
 
