@@ -194,6 +194,23 @@ class RawFrameCanvas {
       curX += 6 * scale;
     }
   }
+
+  drawGrayscaleRaw(rawBuffer: Buffer, bgR: number, bgG: number, bgB: number, fgR: number, fgG: number, fgB: number) {
+    const totalPixels = this.width * this.height;
+    const len = Math.min(totalPixels, rawBuffer.length);
+    for (let i = 0; i < len; i++) {
+      const val = rawBuffer[i] ?? 255;
+      const t = val / 255.0;
+      const r = Math.round(fgR + (bgR - fgR) * t);
+      const g = Math.round(fgG + (bgG - fgG) * t);
+      const b = Math.round(fgB + (bgB - fgB) * t);
+      
+      const pixelStart = i * 3;
+      this.buffer[pixelStart] = b;
+      this.buffer[pixelStart + 1] = g;
+      this.buffer[pixelStart + 2] = r;
+    }
+  }
 }
 
 function findFFmpegPath(): string {
@@ -337,6 +354,19 @@ export class MotionCanvasAdapter {
       }
     }
 
+    // Pre-load all sketches raw buffers to eliminate I/O overhead
+    const sketchesDir = join(resolvedTempDir, 'reference_sketches');
+    const sketchesCache = new Map<number, Buffer>();
+    if (existsSync(sketchesDir)) {
+      for (const s of refScenes) {
+        const padIdx = String(s.sceneIndex).padStart(3, '0');
+        const rawPath = join(sketchesDir, `keyframe_${padIdx}.raw`);
+        if (existsSync(rawPath)) {
+          sketchesCache.set(s.sceneIndex, readFileSync(rawPath));
+        }
+      }
+    }
+
     for (let f = 0; f < framesCount; f++) {
       if (ffmpegExitCode !== null) {
         return {
@@ -348,429 +378,39 @@ export class MotionCanvasAdapter {
       const t_sec = f / renderIr.fps;
 
       if (isHumans) {
-        // Draw Zenn style storyboard scenes dynamically based on time
-        const drawXCross = (cx: number, cy: number, halfW: number, halfH: number) => {
-          for (let dw = -8; dw <= 8; dw++) {
-            canvas.drawLine(cx - halfW, cy - halfH + dw, cx + halfW, cy + halfH + dw, 240, 20, 20);
-            canvas.drawLine(cx + halfW, cy - halfH + dw, cx - halfW, cy + halfH + dw, 240, 20, 20);
-          }
-        };
-
-        const drawLog = (x1: number, y1: number, x2: number, y2: number) => {
-          for (let w = -14; w <= 14; w++) {
-            canvas.drawLine(x1, y1 + w, x2, y2 + w, 0, 0, 0);
-          }
-          for (let w = -10; w <= 10; w++) {
-            canvas.drawLine(x1, y1 + w, x2, y2 + w, 117, 69, 37);
-          }
-        };
-
-        const drawRectOutline = (rx: number, ry: number, rw: number, rh: number, rr: number, rg: number, rb: number) => {
-          canvas.drawRect(rx, ry, rw, 2, rr, rg, rb);
-          canvas.drawRect(rx, ry + rh - 2, rw, 2, rr, rg, rb);
-          canvas.drawRect(rx, ry, 2, rh, rr, rg, rb);
-          canvas.drawRect(rx + rw - 2, ry, 2, rh, rr, rg, rb);
-        };
-
-        const drawFlameLobe = (apexX: number, apexY: number, baseX1: number, baseX2: number, baseY = 940) => {
-          for (let y = Math.round(apexY); y <= baseY; y++) {
-            const t = (y - apexY) / (baseY - apexY);
-            const xLeft = apexX - (apexX - baseX1) * t;
-            const xRight = apexX + (baseX2 - apexX) * t;
-            canvas.drawRect(xLeft, y, xRight - xLeft, 1, 255, 127, 26);
-          }
-          canvas.drawLine(apexX, apexY, baseX1, baseY, 0, 0, 0);
-          canvas.drawLine(apexX, apexY, baseX2, baseY, 0, 0, 0);
-        };
-
-        if (t_sec < 6.0) {
-          // Scene 1: Beige room, window, bookshelf, lamp, stick figure on purple sofa
-          canvas.fill(249, 247, 235);
-
-          // Room outline perspective lines
-          canvas.drawLine(0, 70, 160, 180, 0, 0, 0);
-          canvas.drawLine(160, 180, 160, 1080, 0, 0, 0);
-          canvas.drawLine(1920, 70, 1720, 180, 0, 0, 0);
-          canvas.drawLine(1720, 180, 1720, 1080, 0, 0, 0);
-          canvas.drawLine(160, 180, 1720, 180, 0, 0, 0);
-
-          // Table left
-          canvas.drawRect(50, 760, 300, 30, 140, 100, 60);
-          canvas.drawRect(50, 758, 300, 2, 0, 0, 0);
-          canvas.drawRect(50, 788, 300, 2, 0, 0, 0);
-          canvas.drawLine(50, 760, 50, 790, 0, 0, 0);
-          canvas.drawLine(350, 760, 350, 790, 0, 0, 0);
-          // Table legs
-          canvas.drawRect(100, 790, 20, 290, 120, 80, 50);
-          canvas.drawLine(100, 790, 100, 1080, 0, 0, 0);
-          canvas.drawLine(120, 790, 120, 1080, 0, 0, 0);
-          canvas.drawRect(280, 790, 20, 290, 120, 80, 50);
-          canvas.drawLine(280, 790, 280, 1080, 0, 0, 0);
-          canvas.drawLine(300, 790, 300, 1080, 0, 0, 0);
-
-          // Green Table Lamp
-          canvas.drawCircle(200, 760, 15, 0, 0, 0, true);
-          canvas.drawLine(200, 745, 200, 640, 0, 0, 0);
-          for (let ly = 550; ly <= 640; ly++) {
-            const t = (ly - 550) / 90;
-            const w = 70 + t * 70;
-            canvas.drawRect(200 - w/2, ly, w, 1, 76, 175, 80);
-          }
-          canvas.drawLine(200 - 35, 550, 200 + 35, 550, 0, 0, 0);
-          canvas.drawLine(200 - 70, 640, 200 + 70, 640, 0, 0, 0);
-          canvas.drawLine(200 - 35, 550, 200 - 70, 640, 0, 0, 0);
-          canvas.drawLine(200 + 35, 550, 200 + 70, 640, 0, 0, 0);
-          canvas.drawLine(220, 640, 220, 680, 0, 0, 0);
-          canvas.drawCircle(220, 680, 4, 0, 0, 0, true);
-
-          // Window right
-          canvas.drawRect(1280, 260, 300, 340, 180, 140, 90);
-          canvas.drawRect(1290, 270, 280, 320, 110, 180, 240); // sky
-          
-          // Clipped hill inside window bounds [1290..1570, 270..590]
-          const cx = 1430, cy = 650, r = 250;
-          for (let wy = 270; wy < 590; wy++) {
-            const dy = wy - cy;
-            if (r * r - dy * dy >= 0) {
-              const dx = Math.sqrt(r * r - dy * dy);
-              const xStart = Math.max(1290, Math.round(cx - dx));
-              const xEnd = Math.min(1570, Math.round(cx + dx));
-              if (xStart < xEnd) {
-                canvas.drawRect(xStart, wy, xEnd - xStart, 1, 76, 175, 80);
-              }
+        // Render pencil sketch outline dynamically based on active scene
+        let drawnSketch = false;
+        const activeScene = [...refScenes].reverse().find(s => s.timestampSec <= t_sec);
+        
+        if (activeScene) {
+          const rawBuffer = sketchesCache.get(activeScene.sceneIndex);
+          if (rawBuffer) {
+            const bgColor = activeScene.backgroundColor || '#151520';
+            const bgRgb = hexToRgb(bgColor);
+            
+            // Calculate luminance to decide chalk-white outline or charcoal outline
+            const bgLuminance = 0.299 * bgRgb.r + 0.587 * bgRgb.g + 0.114 * bgRgb.b;
+            let fgRgb = { r: 48, g: 48, b: 48 }; // Charcoal pencil
+            if (bgLuminance < 128) {
+              fgRgb = { r: 240, g: 240, b: 240 }; // White chalk
             }
+            
+            canvas.drawGrayscaleRaw(rawBuffer, bgRgb.r, bgRgb.g, bgRgb.b, fgRgb.r, fgRgb.g, fgRgb.b);
+            drawnSketch = true;
           }
-
-          canvas.drawCircle(1350, 320, 30, 255, 255, 255, true); // cloud
-          canvas.drawCircle(1370, 320, 20, 255, 255, 255, true);
-          canvas.drawLine(1290, 430, 1570, 430, 0, 0, 0); // pane splitter
-          canvas.drawLine(1280, 260, 1580, 260, 0, 0, 0);
-          canvas.drawLine(1280, 600, 1580, 600, 0, 0, 0);
-          canvas.drawLine(1280, 260, 1280, 600, 0, 0, 0);
-          canvas.drawLine(1580, 260, 1580, 600, 0, 0, 0);
-
-          // Bookshelf far right
-          canvas.drawRect(1650, 440, 230, 640, 41, 107, 167);
-          canvas.drawLine(1650, 440, 1880, 440, 0, 0, 0);
-          canvas.drawLine(1650, 440, 1650, 1080, 0, 0, 0);
-          canvas.drawLine(1880, 440, 1880, 1080, 0, 0, 0);
-          // Books
-          canvas.drawRect(1670, 480, 30, 150, 255, 120, 0); // Book 1
-          drawRectOutline(1670, 480, 30, 150, 0, 0, 0);
-          canvas.drawRect(1705, 520, 30, 110, 76, 175, 80); // Book 2
-          drawRectOutline(1705, 520, 30, 110, 0, 0, 0);
-          canvas.drawRect(1670, 680, 35, 150, 255, 120, 0); // Shelf 2
-          drawRectOutline(1670, 680, 35, 150, 0, 0, 0);
-          canvas.drawRect(1710, 680, 30, 150, 76, 175, 80);
-          drawRectOutline(1710, 680, 30, 150, 0, 0, 0);
-
-          // Purple Sofa
-          canvas.drawRect(450, 720, 1020, 180, 134, 96, 180);
-          canvas.drawLine(450, 720, 1470, 720, 0, 0, 0);
-          canvas.drawLine(450, 900, 1470, 900, 0, 0, 0);
-          canvas.drawLine(450, 720, 450, 900, 0, 0, 0);
-          canvas.drawLine(1470, 720, 1470, 900, 0, 0, 0);
-          // Sofa backrest
-          canvas.drawRect(480, 600, 960, 120, 134, 96, 180);
-          canvas.drawLine(480, 600, 1440, 600, 0, 0, 0);
-          canvas.drawLine(480, 600, 480, 720, 0, 0, 0);
-          canvas.drawLine(1440, 600, 1440, 720, 0, 0, 0);
-          // Left armrest
-          canvas.drawRect(400, 700, 70, 200, 134, 96, 180);
-          canvas.drawLine(400, 700, 470, 700, 0, 0, 0);
-          canvas.drawLine(400, 700, 400, 900, 0, 0, 0);
-          canvas.drawLine(470, 700, 470, 900, 0, 0, 0);
-          // Right armrest
-          canvas.drawRect(1450, 700, 70, 200, 134, 96, 180);
-          canvas.drawLine(1450, 700, 1520, 700, 0, 0, 0);
-          canvas.drawLine(1450, 700, 1450, 900, 0, 0, 0);
-          canvas.drawLine(1520, 700, 1520, 900, 0, 0, 0);
-
-          // Ceiling Lamp Ring
-          for (let r = 78; r < 92; r++) {
-            canvas.drawCircle(960, 150, r, 220, 100, 30);
-          }
-          canvas.drawCircle(960, 150, 77, 255, 255, 255, true);
-          canvas.drawCircle(960, 150, 92, 0, 0, 0); // border
-
-          // Radial light rays spiky
-          const rayAngles = [0, 20, 45, 65, 90, 115, 135, 160, 180, 200, 225, 245, 270, 295, 315, 340];
-          for (const angle of rayAngles) {
-            const rad = (angle * Math.PI) / 180;
-            const startR = 100;
-            const endR = 250 + (angle % 3) * 50;
-            const rx1 = 960 + startR * Math.cos(rad);
-            const ry1 = 150 + startR * Math.sin(rad);
-            const rx2 = 960 + endR * Math.cos(rad);
-            const ry2 = 150 + endR * Math.sin(rad);
-            for (let w = -2; w <= 2; w++) {
-              canvas.drawLine(rx1, ry1 + w, rx2, ry2 + w, 255, 200, 0);
-            }
-          }
-
-          // Stick Figure sitting centered
-          canvas.drawCircle(960, 480, 65, 0, 0, 0);
-          canvas.drawCircle(960, 480, 62, 255, 255, 255, true);
-          // Eyes
-          canvas.drawCircle(940, 470, 18, 0, 0, 0);
-          canvas.drawCircle(940, 470, 16, 255, 255, 255, true);
-          canvas.drawCircle(940, 470, 5, 0, 0, 0, true);
-          canvas.drawCircle(980, 470, 18, 0, 0, 0);
-          canvas.drawCircle(980, 470, 16, 255, 255, 255, true);
-          canvas.drawCircle(980, 470, 5, 0, 0, 0, true);
-          // Eyebrows
-          canvas.drawLine(925, 445, 955, 445, 0, 0, 0);
-          canvas.drawLine(965, 445, 995, 445, 0, 0, 0);
-          // Mouth
-          canvas.drawLine(935, 515, 985, 515, 0, 0, 0);
-          // Body
-          canvas.drawLine(960, 545, 960, 760, 0, 0, 0);
-          // Arms
-          canvas.drawLine(960, 580, 880, 570, 0, 0, 0);
-          canvas.drawLine(880, 570, 900, 660, 0, 0, 0);
-          canvas.drawLine(960, 580, 1040, 570, 0, 0, 0);
-          canvas.drawLine(1040, 570, 1020, 660, 0, 0, 0);
-          // Legs
-          canvas.drawLine(960, 760, 860, 760, 0, 0, 0);
-          canvas.drawLine(860, 760, 890, 880, 0, 0, 0);
-          canvas.drawLine(960, 760, 980, 760, 0, 0, 0);
-          canvas.drawLine(980, 760, 980, 880, 0, 0, 0);
-
-        } else if (t_sec < 12.0) {
-          // Scene 2: White background, grey light switch with a red "X"
-          canvas.fill(255, 255, 255);
-
-          // Grey switch plate
-          canvas.drawRect(960 - 180, 540 - 240, 360, 480, 150, 150, 150);
-          canvas.drawRect(960 - 182, 540 - 242, 364, 4, 0, 0, 0);
-          canvas.drawRect(960 - 182, 540 + 238, 364, 4, 0, 0, 0);
-          canvas.drawLine(960 - 180, 540 - 240, 960 - 180, 540 + 240, 0, 0, 0);
-          canvas.drawLine(960 + 180, 540 - 240, 960 + 180, 540 + 240, 0, 0, 0);
-
-          // White toggle
-          canvas.drawRect(960 - 40, 540 - 80, 80, 160, 255, 255, 255);
-          canvas.drawRect(960 - 42, 540 - 82, 84, 4, 0, 0, 0);
-          canvas.drawRect(960 - 42, 540 + 78, 84, 4, 0, 0, 0);
-          canvas.drawLine(960 - 40, 540 - 80, 960 - 40, 540 + 80, 0, 0, 0);
-          canvas.drawLine(960 + 40, 540 - 80, 960 + 40, 540 + 80, 0, 0, 0);
-
-          // Red "X" cross
-          drawXCross(960, 540, 240, 200);
-
-        } else if (t_sec < 20.0) {
-          // Scene 3: Dark blue background, transparent outline couch, stick figure holding blue phone
-          canvas.fill(43, 76, 126);
-
-          // 3D outline sofa (thick lines)
-          const drawThickLine = (lx1: number, ly1: number, lx2: number, ly2: number) => {
-            for (let w = -2; w <= 2; w++) {
-              canvas.drawLine(lx1, ly1 + w, lx2, ly2 + w, 0, 0, 0);
-            }
-          };
-          // Backrest
-          drawThickLine(420, 370, 780, 330);
-          drawThickLine(420, 370, 435, 625);
-          drawThickLine(780, 330, 795, 585);
-          drawThickLine(435, 625, 795, 585);
-          // Seat cushion top surface
-          drawThickLine(435, 625, 820, 780);
-          drawThickLine(820, 780, 1500, 610);
-          drawThickLine(1500, 610, 1115, 455);
-          drawThickLine(1115, 455, 435, 625);
-          // Seat cushion front face
-          drawThickLine(820, 780, 830, 920);
-          drawThickLine(1500, 610, 1510, 750);
-          drawThickLine(830, 920, 1510, 750);
-
-          // Stick Figure sitting
-          canvas.drawCircle(960, 270, 80, 0, 0, 0);
-          canvas.drawCircle(960, 270, 76, 255, 255, 255, true);
-          // Eyes looking right towards phone
-          canvas.drawCircle(925, 260, 22, 0, 0, 0);
-          canvas.drawCircle(925, 260, 19, 255, 255, 255, true);
-          canvas.drawCircle(935, 260, 6, 0, 0, 0, true);
-          canvas.drawCircle(995, 260, 22, 0, 0, 0);
-          canvas.drawCircle(995, 260, 19, 255, 255, 255, true);
-          canvas.drawCircle(1005, 260, 6, 0, 0, 0, true);
-          // Eyebrows
-          canvas.drawLine(905, 225, 945, 225, 0, 0, 0);
-          canvas.drawLine(975, 225, 1015, 225, 0, 0, 0);
-          // Mouth
-          canvas.drawLine(920, 320, 1000, 320, 0, 0, 0);
-          // Body
-          canvas.drawLine(960, 350, 960, 650, 0, 0, 0);
-          // Legs
-          canvas.drawLine(960, 650, 840, 630, 0, 0, 0);
-          canvas.drawLine(960, 650, 1020, 710, 0, 0, 0);
-          canvas.drawLine(1020, 710, 1020, 880, 0, 0, 0);
-          // Arm holding phone
-          canvas.drawLine(960, 430, 1100, 460, 0, 0, 0);
-
-          // Cyan/Blue phone
-          canvas.drawRect(1100, 350, 60, 120, 0, 168, 255);
-          canvas.drawLine(1100, 350, 1160, 350, 0, 0, 0);
-          canvas.drawLine(1100, 470, 1160, 470, 0, 0, 0);
-          canvas.drawLine(1100, 350, 1100, 470, 0, 0, 0);
-          canvas.drawLine(1160, 350, 1160, 470, 0, 0, 0);
-          canvas.drawCircle(1115, 365, 5, 0, 0, 0, true); // camera lens
-
-        } else if (t_sec < 120.0) {
-          // Scene 4: Split between Candle (20 - 27.5s) and Campfire (27.5 - 30s)
-          if (t_sec < 27.5) {
-            // Part 1: White background, candle with red "X"
-            canvas.fill(255, 255, 255);
-
-            // Candle body
-            canvas.drawRect(960 - 50, 540 - 100, 100, 240, 245, 240, 220);
-            canvas.drawLine(960 - 50, 540 - 100, 960 + 50, 540 - 100, 0, 0, 0);
-            canvas.drawLine(960 - 50, 540 + 140, 960 + 50, 540 + 140, 0, 0, 0);
-            canvas.drawLine(960 - 50, 540 - 100, 960 - 50, 540 + 140, 0, 0, 0);
-            canvas.drawLine(960 + 50, 540 - 100, 960 + 50, 540 + 140, 0, 0, 0);
-
-            // Wick
-            canvas.drawLine(960, 540 - 100, 960, 540 - 120, 0, 0, 0);
-
-            // Flame
-            for (let fy = 540 - 180; fy <= 540 - 120; fy++) {
-              const t = (fy - (540 - 180)) / 60;
-              const w = 40 * t;
-              canvas.drawRect(960 - w/2, fy, w, 1, 255, 120, 0);
-            }
-            canvas.drawLine(960, 540 - 180, 960 - 20, 540 - 120, 0, 0, 0);
-            canvas.drawLine(960, 540 - 180, 960 + 20, 540 - 120, 0, 0, 0);
-            canvas.drawLine(960 - 20, 540 - 120, 960 + 20, 540 - 120, 0, 0, 0);
-
-            // Red X
-            drawXCross(960, 540, 240, 200);
-
-          } else {
-            // Part 2: Starry sky with a glowing campfire flickering at bottom
-            canvas.fill(8, 17, 24); // Dark navy sky
-
-            // Larger stars
-            for (let i = 0; i < STARS.length; i++) {
-              const star = STARS[i];
-              if (star) {
-                const flicker = (star.size * 2) * (1.0 + 0.3 * Math.sin(f * 0.15 + star.x));
-                canvas.drawCircle(star.x, star.y, flicker, 255, 255, 255, true);
-              }
-            }
-
-            // Raised ground for visibility (above subtitle box)
-            canvas.drawRect(0, 880, 1920, 200, 185, 115, 80);
-            canvas.drawLine(0, 880, 1920, 880, 0, 0, 0);
-
-            // Spiky campfire flames (5 lobes drawn behind logs)
-            const waveCenter = Math.sin(f * 0.15) * 25;
-            const waveLeft1 = Math.cos(f * 0.2) * 18;
-            const waveLeft2 = Math.sin(f * 0.18) * 15;
-            const waveRight1 = Math.sin(f * 0.22) * 18;
-            const waveRight2 = Math.cos(f * 0.25) * 15;
-
-            drawFlameLobe(960, 560 + waveCenter, 900, 1020, 880);      // Center Lobe
-            drawFlameLobe(890, 620 + waveLeft1, 840, 940, 880);        // Left Inner Lobe
-            drawFlameLobe(1030, 620 + waveRight1, 980, 1080, 880);     // Right Inner Lobe
-            drawFlameLobe(830, 700 + waveLeft2, 790, 870, 880);        // Left Outer Lobe
-            drawFlameLobe(1090, 700 + waveRight2, 1050, 1130, 880);    // Right Outer Lobe
-            canvas.drawLine(790, 880, 1130, 880, 0, 0, 0);
-
-            // Angled logs pile (drawn on top of flames)
-            drawLog(780, 900, 960, 830);
-            drawLog(1140, 900, 960, 830);
-            drawLog(760, 870, 980, 810);
-            drawLog(1160, 870, 940, 810);
-            drawLog(820, 840, 1100, 840);
-          }
-
-        } else if (t_sec < 180.0) {
-          // Scene 5: Cave walls and campfire
-          canvas.fill(32, 22, 18);
-
-
-          // Cave outline lines
-          canvas.drawLine(100, 100, 250, 300, 65, 50, 40);
-          canvas.drawLine(250, 300, 150, 600, 65, 50, 40);
-          canvas.drawLine(150, 600, 300, 800, 65, 50, 40);
-
-          canvas.drawLine(1820, 100, 1670, 300, 65, 50, 40);
-          canvas.drawLine(1670, 300, 1770, 600, 65, 50, 40);
-          canvas.drawLine(1770, 600, 1620, 800, 65, 50, 40);
-
-          canvas.drawRect(0, 800, 1920, 280, 52, 36, 26); // cave ground
-          canvas.drawRect(960 - 80, 820 - 15, 160, 30, 75, 45, 25); // logs
-
-          const flameH = 100 + Math.sin(f * 0.35) * 15;
-          const flameW = 85 + Math.cos(f * 0.45) * 10;
-          canvas.drawCircle(960, 790 - flameH / 2, flameW, 255, 110, 0, true); // flame
-          canvas.drawCircle(960, 795 - flameH / 2, flameW - 35, 255, 200, 0, true);
-
-        } else if (t_sec < 330.0) {
-          // Scene 6: Stick figure sleeping on the sofa (first sleep / second sleep)
-          canvas.fill(8, 12, 28);
-          
-          // Window
-          canvas.drawRect(1200, 150, 400, 300, 30, 40, 70);
-          canvas.drawCircle(1300, 220, 3, 255, 255, 255, true);
-          canvas.drawCircle(1450, 280, 4, 255, 255, 255, true);
-          canvas.drawCircle(1500, 200, 2, 255, 255, 255, true);
-
-          // Sofa
-          canvas.drawRect(960 - 350, 700 - 80, 700, 160, 55, 38, 78);
-
-          // Sleeping stick figure
-          canvas.drawCircle(720, 620, 40, 200, 200, 220);
-          canvas.drawCircle(720, 620, 38, 25, 25, 40, true);
-          canvas.drawLine(700, 625, 740, 625, 200, 200, 220);
-          canvas.drawLine(760, 620, 1100, 620, 200, 200, 220);
-          canvas.drawLine(850, 620, 870, 680, 200, 200, 220);
-          canvas.drawLine(1100, 620, 1130, 680, 200, 200, 220);
-
-        } else if (t_sec < 390.0) {
-          // Scene 7: Street lamps
-          canvas.fill(5, 5, 8);
-          canvas.drawRect(0, 850, 1920, 230, 24, 24, 30);
-
-          const lamps = [300, 960, 1620];
-          for (const lx of lamps) {
-            canvas.drawLine(lx, 850, lx, 300, 100, 100, 110);
-            canvas.drawCircle(lx, 300, 25, 255, 215, 0, true);
-
-            for (let w_offset = 0; w_offset < 150; w_offset += 10) {
-              canvas.drawLine(lx, 300, lx - w_offset, 850, 255, 220, 100);
-              canvas.drawLine(lx, 300, lx + w_offset, 850, 255, 220, 100);
-            }
-          }
-
-        } else {
-          // Scene 8: Final Starry sky with a campfire flickering at bottom
-          canvas.fill(8, 8, 10);
-
-          // Stars
-          for (let i = 0; i < STARS.length; i++) {
-            const star = STARS[i];
-            if (star) {
-              const flicker = star.size * (1.0 + 0.35 * Math.sin(f * 0.15 + star.x));
-              canvas.drawCircle(star.x, star.y, flicker, 255, 255, 255, true);
-            }
-          }
-
-          canvas.drawRect(0, 800, 1920, 280, 102, 68, 48); // ground
-          canvas.drawRect(960 - 80, 820 - 15, 160, 30, 75, 45, 25); // logs
-
-          const flameH = 90 + Math.sin(f * 0.3) * 12;
-          const flameW = 80 + Math.cos(f * 0.4) * 8;
-          canvas.drawCircle(960, 790 - flameH / 2, flameW, 255, 120, 0, true); // flame
-          canvas.drawCircle(960, 795 - flameH / 2, flameW - 35, 255, 210, 0, true);
+        }
+        
+        if (!drawnSketch) {
+          canvas.fill(249, 247, 235); // Fallback beige room color
         }
 
-        // Subtitles Box
+        // Subtitles Box overlay
         canvas.drawRect(960 - 750, 940 - 50, 1500, 100, 35, 36, 45);
         canvas.drawRect(960 - 748, 940 - 48, 1496, 96, 20, 20, 25);
 
-        const sec = f / renderIr.fps;
-        const currentMs = (f / renderIr.fps) * 1000;
+        // Get active subtitle caption
         let activeText = "TONIGHT, WHEN THE SUN GOES DOWN, YOU'RE GOING TO FLIP A SWITCH.";
-        
+        const currentMs = (f / renderIr.fps) * 1000;
         if (timelineIr) {
           const activeCaptionEvent = timelineIr.tracks.captions.find(
             (e: any) => currentMs >= e.startMs && currentMs < e.startMs + e.durationMs
@@ -778,26 +418,7 @@ export class MotionCanvasAdapter {
           if (activeCaptionEvent && activeCaptionEvent.payload) {
             activeText = (activeCaptionEvent.payload.text || "").toUpperCase();
           }
-        } else {
-          if (sec < 6.0) {
-            activeText = "TONIGHT, WHEN THE SUN GOES DOWN, YOU'RE GOING TO FLIP A SWITCH.";
-          } else if (sec < 12.0) {
-            activeText = "BUT FOR 99.9% OF HUMAN HISTORY, THAT SWITCH DIDN'T EXIST.";
-          } else if (sec < 20.0) {
-            activeText = "BUT MODERN HUMANS ALMOST NEVER EXPERIENCE THIS.";
-          } else if (sec < 120.0) {
-            activeText = "JUST THE BLACK SKY, THE STARS, AND WHATEVER FIRE THEY COULD KEEP ALIVE.";
-          } else if (sec < 180.0) {
-            activeText = "THE EARLIEST EVIDENCE OF FIRE COMES FROM WONDERWERK CAVE IN SOUTH AFRICA.";
-          } else if (sec < 330.0) {
-            activeText = "BEFORE THE INDUSTRIAL AGE, PEOPLE SLEPT IN TWO DISTINCT PHASES.";
-          } else if (sec < 390.0) {
-            activeText = "CHEAPER CANDLES AND GAS LAMPS FLOODED THE MEDIEVAL CITIES WITH LIGHT.";
-          } else {
-            activeText = "WE TRADED THE rhythm OF CIRCADIAN DARKNESS FOR A LIGHT SWITCH.";
-          }
         }
-
         canvas.drawString(960 - 710, 940 - 15, activeText, 2, 255, 255, 255);
 
       } else {

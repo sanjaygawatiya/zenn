@@ -70,6 +70,10 @@ async function main() {
   const segmentCmd = `python src/core/utils/analyze_reference.py "${refVideo}" "${outDir}"`;
   execSync(segmentCmd, { stdio: 'inherit' });
 
+  console.log('Processing reference keyframes into pencil sketch outlines...');
+  const sketchCmd = `python src/core/utils/pencil_sketch.py "${outDir}"`;
+  execSync(sketchCmd, { stdio: 'inherit' });
+
   // Read reference scene durations and visual themes for pacing alignment
   let refDurations: number[] = [];
   let refScenes: any[] = [];
@@ -252,29 +256,11 @@ async function main() {
       process.exit(1);
     }
 
-    // 8. Pad and Concatenate EdgeTTS narration segments to match scene pacing
-    console.log('Padding narration segments to match scene durations...');
-    const paddedFiles: string[] = [];
-    for (let i = 0; i < scenes.length; i++) {
-      const scene = scenes[i]!;
-      const pad = String(i + 1).padStart(3, '0');
-      const wavPath = join(outDir, `audio/narration_${pad}.wav`);
-      const paddedWavPath = join(outDir, `audio/padded_${pad}.wav`);
-      
-      const targetDurationSec = scene.durationMs / 1000.0;
-      const padCmd = `"${ffmpegPath}" -y -i "${wavPath}" -af "apad" -t ${targetDurationSec} "${paddedWavPath}"`;
-      execSync(padCmd, { stdio: 'ignore' });
-      paddedFiles.push(paddedWavPath);
-    }
-
-    const audioListPath = join(outDir, 'audio_list.txt');
-    const listContent = paddedFiles.map(p => `file '${p.replace(/\\/g, '/')}'`).join('\n');
-    writeFileSync(audioListPath, listContent, 'utf8');
-
+    // 8. Mix EdgeTTS narration segments at their exact timestamps
+    console.log('Mixing narration segments into a master narration track...');
     const masterAudioPath = join(outDir, 'audio_master.wav');
-    console.log('Concatenating padded audio segments into a master narration track...');
-    const concatCmd = `"${ffmpegPath}" -y -f concat -safe 0 -i "${audioListPath}" -c copy "${masterAudioPath}"`;
-    execSync(concatCmd, { stdio: 'ignore' });
+    const mixAudioCmd = `python src/core/utils/mix_narration.py "${outDir}" "${masterAudioPath}" "${storyboardJsonPath}"`;
+    execSync(mixAudioCmd, { stdio: 'inherit' });
 
     // 9. Mux master narration track into final video
     const finalMixedPath = join(outDir, 'output_mixed.mp4');
