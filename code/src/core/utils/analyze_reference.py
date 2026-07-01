@@ -2,9 +2,35 @@ import subprocess
 import json
 import sys
 import os
+from PIL import Image
 
 ffprobe_path = 'C:/Users/sanja/AppData/Local/Programs/Python/Python314/Lib/site-packages/static_ffmpeg/bin/win32/ffprobe.exe'
 ffmpeg_path = 'C:/Users/sanja/AppData/Local/Programs/Python/Python314/Lib/site-packages/static_ffmpeg/bin/win32/ffmpeg.exe'
+
+def extract_dominant_colors(img_path):
+    try:
+        img = Image.open(img_path)
+        # Quantize to 2 colors to get dominant background and foreground/subject
+        quantized = img.quantize(colors=2).convert('RGB')
+        colors = quantized.getcolors()
+        if not colors:
+            return "#151520", "#00a8ff"
+        # Sort by count descending
+        colors = sorted(colors, key=lambda x: x[0], reverse=True)
+        
+        bg_rgb = colors[0][1]
+        bg_hex = f"#{bg_rgb[0]:02x}{bg_rgb[1]:02x}{bg_rgb[2]:02x}"
+        
+        if len(colors) > 1:
+            fg_rgb = colors[1][1]
+            fg_hex = f"#{fg_rgb[0]:02x}{fg_rgb[1]:02x}{fg_rgb[2]:02x}"
+        else:
+            fg_hex = bg_hex
+            
+        return bg_hex, fg_hex
+    except Exception as e:
+        print(f"Error extracting colors: {e}")
+        return "#151520", "#00a8ff"
 
 def analyze_reference(video_path, out_dir):
     os.makedirs(out_dir, exist_ok=True)
@@ -71,19 +97,33 @@ def analyze_reference(video_path, out_dir):
     if timestamps:
         scene_durations.append(max(1.0, tot_dur_sec - timestamps[-1]))
         
+    # 3. Extract colors for each keyframe and build scene objects
+    scenes = []
+    for idx, ts in enumerate(timestamps):
+        out_img = os.path.join(out_dir, "reference_keyframes", f"keyframe_{idx + 1:03d}.png")
+        bg_hex, fg_hex = extract_dominant_colors(out_img)
+        scenes.append({
+            "sceneIndex": idx + 1,
+            "timestampSec": ts,
+            "durationSec": scene_durations[idx],
+            "backgroundColor": bg_hex,
+            "primaryColor": fg_hex
+        })
+        
     # Write analysis report
     report = {
         "success": True,
         "totalDurationSec": tot_dur_sec,
         "keyframeTimestamps": timestamps,
         "sceneDurations": scene_durations,
-        "sceneCount": len(timestamps)
+        "sceneCount": len(timestamps),
+        "scenes": scenes
     }
     
     with open(os.path.join(out_dir, "reference_segmentation.json"), "w") as f:
         json.dump(report, f, indent=2)
         
-    print(f"Reference video analyzed successfully. Found {len(timestamps)} scenes.")
+    print(f"Reference video analyzed successfully. Found {len(timestamps)} scenes with extracted visual themes.")
     return report
 
 if __name__ == "__main__":

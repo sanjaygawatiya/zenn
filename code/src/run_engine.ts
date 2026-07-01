@@ -70,11 +70,13 @@ async function main() {
   const segmentCmd = `python src/core/utils/analyze_reference.py "${refVideo}" "${outDir}"`;
   execSync(segmentCmd, { stdio: 'inherit' });
 
-  // Read reference scene durations for pacing alignment
+  // Read reference scene durations and visual themes for pacing alignment
   let refDurations: number[] = [];
+  let refScenes: any[] = [];
   if (existsSync(segmentationPath)) {
     const segData = JSON.parse(readFileSync(segmentationPath, 'utf8'));
     refDurations = segData.sceneDurations || [];
+    refScenes = segData.scenes || [];
   }
 
   // 2. Parse Transcript into script lines
@@ -124,6 +126,10 @@ async function main() {
     const refSceneDurMs = refDurationVal !== undefined ? Math.round(refDurationVal * 1000) : 0;
     const finalSceneDurMs = Math.max(refSceneDurMs, durationMs);
 
+    const activeRefScene = refScenes[i] || {};
+    const bgColor = activeRefScene.backgroundColor || '#151520';
+    const primaryColor = activeRefScene.primaryColor || '#00a8ff';
+
     console.log(`- Scene Duration resolved: ${finalSceneDurMs} ms (ref: ${refSceneDurMs} ms, audio: ${durationMs} ms)`);
 
     scenes.push({
@@ -132,10 +138,17 @@ async function main() {
       rawScript: text,
       assets: [
         {
+          assetId: `bg_000${i + 1}`,
+          type: 'NODE' as const,
+          role: 'background' as const,
+          style: bgColor,
+          mustRemainVisible: true,
+        },
+        {
           assetId: `subject_000${i + 1}`,
           type: 'NODE' as const,
           role: 'primary_subject' as const,
-          style: 'solid',
+          style: primaryColor,
           mustRemainVisible: true,
         },
         {
@@ -231,7 +244,7 @@ async function main() {
     if (existsSync(similarityReportPath)) {
       const report = JSON.parse(readFileSync(similarityReportPath, 'utf8'));
       const avgSimilarity = report.averageSimilarityPercent || 0;
-      const threshold = parseFloat(process.env['SIMILARITY_THRESHOLD'] || '15.0');
+      const threshold = parseFloat(process.env['SIMILARITY_THRESHOLD'] || '50.0');
       console.log(`Similarity Validation: average=${avgSimilarity}%, threshold=${threshold}%`);
       if (avgSimilarity < threshold) {
         console.error(`ERROR: Visual similarity score ${avgSimilarity}% is below the required threshold of ${threshold}%!`);

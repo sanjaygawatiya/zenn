@@ -112,7 +112,7 @@ export class MotionToRenderCompiler implements CompilerPass<MotionToRenderInput,
       assetsRenderBlocks.push({
         assetId: asset.assetId,
         resolvedUri: `assets/${asset.assetId}.svg`,
-        layer: asset.zIndex === 10 ? 'midground' : 'foreground',
+        layer: asset.zIndex === 1 ? 'background' : (asset.zIndex === 10 ? 'midground' : 'foreground'),
         zIndex: asset.zIndex,
         keyframes,
       });

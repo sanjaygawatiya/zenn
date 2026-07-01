@@ -1,5 +1,17 @@
-import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
+
+function hexToRgb(hex: string): { r: number, g: number, b: number } {
+  const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  if (match && match[1] && match[2] && match[3]) {
+    return {
+      r: parseInt(match[1], 16),
+      g: parseInt(match[2], 16),
+      b: parseInt(match[3], 16)
+    };
+  }
+  return { r: 21, g: 21, b: 32 };
+}
 import { execSync, spawn } from 'node:child_process';
 import { RenderIR } from '../ir/render.js';
 import { AudioIR } from '../ir/audio.js';
@@ -220,6 +232,16 @@ export class MotionCanvasAdapter {
     const resolvedTempDir = resolve(tempDir);
     if (!existsSync(resolvedTempDir)) {
       mkdirSync(resolvedTempDir, { recursive: true });
+    }
+
+    // Read reference segmentation visual themes for dynamic styling
+    let refScenes: any[] = [];
+    const segmentationPath = join(resolvedTempDir, 'reference_segmentation.json');
+    if (existsSync(segmentationPath)) {
+      try {
+        const segData = JSON.parse(readFileSync(segmentationPath, 'utf8'));
+        refScenes = segData.scenes || [];
+      } catch {}
     }
 
     const width = renderIr.resolution.width;
@@ -764,8 +786,20 @@ export class MotionCanvasAdapter {
         canvas.drawString(960 - 710, 940 - 15, activeText, 2, 255, 255, 255);
 
       } else {
-        // Fallback or Phantom Phone drawing routine
-        canvas.fill(21, 21, 32);
+        // Fallback drawing routine: Resolve background color and primary subject color dynamically from reference themes
+        let activeBgColor = '#151520';
+        let activePrimaryColor = '#00a8ff';
+        const t_sec = f / renderIr.fps;
+        const activeScene = [...refScenes].reverse().find(s => s.timestampSec <= t_sec);
+        if (activeScene) {
+          activeBgColor = activeScene.backgroundColor || activeBgColor;
+          activePrimaryColor = activeScene.primaryColor || activePrimaryColor;
+        }
+
+        const bgRgb = hexToRgb(activeBgColor);
+        const primaryRgb = hexToRgb(activePrimaryColor);
+
+        canvas.fill(bgRgb.r, bgRgb.g, bgRgb.b);
         const camKeyframes = [...renderIr.camera.keyframes].sort((a, b) => a.frame - b.frame);
         let camX = width / 2;
         let camY = height / 2;
@@ -862,25 +896,28 @@ export class MotionCanvasAdapter {
               canvas.drawRect(screenX - w / 2, screenY - h / 2, w, h, 35, 36, 45);
               canvas.drawRect(screenX - w / 2 + 2, screenY - h / 2 + 2, w - 4, h - 4, 20, 20, 25);
               canvas.drawString(screenX - w / 2 + 40, screenY - h / 2 + 35, activeSubtitle, 2, 255, 255, 255);
-            } else {
-              // Draw generic "Concept Node" for subject assets
+            } else if (asset.layer !== 'background') {
+              // Draw generic "Concept Node" for subject assets (excluding background layer)
               const w = 240 * scaleX * camZoom;
               const h = 240 * scaleY * camZoom;
               const radius = 80 * scaleX * camZoom;
 
-              // Orbital path ring
-              canvas.drawCircle(screenX, screenY, radius * 1.5, 60, 60, 80);
+              // Orbital path ring (blend bg and primary colors for the path ring)
+              const blendR = Math.round((bgRgb.r + primaryRgb.r) / 2);
+              const blendG = Math.round((bgRgb.g + primaryRgb.g) / 2);
+              const blendB = Math.round((bgRgb.b + primaryRgb.b) / 2);
+              canvas.drawCircle(screenX, screenY, radius * 1.5, blendR, blendG, blendB);
 
               // Pulsing/Orbiting particle
               const orbitAngle = (f * 0.04) % (2 * Math.PI);
               const opx = screenX + radius * 1.5 * Math.cos(orbitAngle);
               const opy = screenY + radius * 1.5 * Math.sin(orbitAngle);
-              canvas.drawCircle(opx, opy, 14 * scaleX * camZoom, 255, 120, 0, true);
-              canvas.drawLine(screenX, screenY, opx, opy, 120, 120, 150);
+              canvas.drawCircle(opx, opy, 14 * scaleX * camZoom, primaryRgb.r, primaryRgb.g, primaryRgb.b, true);
+              canvas.drawLine(screenX, screenY, opx, opy, blendR, blendG, blendB);
 
               // Main Node Circle
-              canvas.drawCircle(screenX, screenY, radius, 0, 168, 255);
-              canvas.drawCircle(screenX, screenY, radius - 4, 25, 25, 38, true);
+              canvas.drawCircle(screenX, screenY, radius, primaryRgb.r, primaryRgb.g, primaryRgb.b);
+              canvas.drawCircle(screenX, screenY, radius - 4, bgRgb.r, bgRgb.g, bgRgb.b, true);
 
               // Inner Label (Asset ID)
               const labelStr = asset.assetId.substring(0, 9).toUpperCase();

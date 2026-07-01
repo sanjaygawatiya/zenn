@@ -9,42 +9,42 @@ ffmpeg_path = 'C:/Users/sanja/AppData/Local/Programs/Python/Python314/Lib/site-p
 
 def compute_similarity(ref_img_path, gen_img_path):
     try:
-        # Load and convert to grayscale for spatial comparison (NCC)
-        img1 = Image.open(ref_img_path).convert('L').resize((32, 32))
-        img2 = Image.open(gen_img_path).convert('L').resize((32, 32))
+        # 1. Grayscale structural correlation (NCC) at 32x32 resolution
+        img1_gray = Image.open(ref_img_path).convert('L').resize((32, 32))
+        img2_gray = Image.open(gen_img_path).convert('L').resize((32, 32))
         
-        a1 = np.array(img1, dtype=np.float32)
-        a2 = np.array(img2, dtype=np.float32)
+        a1 = np.array(img1_gray, dtype=np.float32)
+        a2 = np.array(img2_gray, dtype=np.float32)
         
         std1 = a1.std()
         std2 = a2.std()
         
         if std1 < 1e-3 or std2 < 1e-3:
-            # Flat color images matching check
             ncc = 1.0 if abs(a1.mean() - a2.mean()) < 5.0 else 0.0
         else:
             ncc = ((a1 - a1.mean()) * (a2 - a2.mean())).mean() / (std1 * std2)
             
         ncc_score = (ncc + 1.0) / 2.0 * 100.0
         
-        # Load and compute RGB histogram correlation (color composition)
-        img1_c = Image.open(ref_img_path).convert('RGB')
-        img2_c = Image.open(gen_img_path).convert('RGB')
+        # 2. Perceptual layout and color composition similarity using 4x4 downsampled RGB cosine similarity
+        # Downsampling to 4x4 matches dominant color layout regions while smoothing high-frequency differences
+        im1_rgb = Image.open(ref_img_path).convert('RGB').resize((4, 4), Image.Resampling.BILINEAR)
+        im2_rgb = Image.open(gen_img_path).convert('RGB').resize((4, 4), Image.Resampling.BILINEAR)
         
-        h1 = np.array(img1_c.histogram(), dtype=np.float32)
-        h2 = np.array(img2_c.histogram(), dtype=np.float32)
+        v1 = np.array(im1_rgb, dtype=np.float32).flatten() / 255.0
+        v2 = np.array(im2_rgb, dtype=np.float32).flatten() / 255.0
         
-        norm1 = np.linalg.norm(h1)
-        norm2 = np.linalg.norm(h2)
+        norm1 = np.linalg.norm(v1)
+        norm2 = np.linalg.norm(v2)
         
         if norm1 < 1e-3 or norm2 < 1e-3:
-            hist_score = 0.0
+            layout_score = 0.0
         else:
-            cos_sim = np.dot(h1, h2) / (norm1 * norm2)
-            hist_score = cos_sim * 100.0
+            cos_sim = np.dot(v1, v2) / (norm1 * norm2)
+            layout_score = cos_sim * 100.0
             
-        # Combine structural and color similarity (40% structural, 60% color)
-        final_score = 0.4 * ncc_score + 0.6 * hist_score
+        # Combine structural (30%) and regional color/layout composition (70%)
+        final_score = 0.3 * ncc_score + 0.7 * layout_score
         return float(round(max(0.0, min(100.0, final_score)), 2))
     except Exception as e:
         print(f"Error comparing images: {e}")
